@@ -17,10 +17,23 @@ if not os.path.exists("db/rentas.csv"):
 st.set_page_config(page_title="App de Arrendamiento", layout="wide")
 st.title("📦 App de Arrendamiento de Equipos de Cómputo")
 
-menu = st.sidebar.selectbox("Menú", ["Registro de Equipos", "Registro de Renta", "Seguimiento de Rentas"])
+# Menú con botones
+col1, col2, col3 = st.columns(3)
+view = None
 
-# Registro de Equipos
-if menu == "Registro de Equipos":
+with col1:
+    if st.button("📋 Registro de Equipos"):
+        view = "Registro de Equipos"
+
+with col2:
+    if st.button("📝 Registro de Renta"):
+        view = "Registro de Renta"
+
+with col3:
+    if st.button("🔍 Seguimiento de Rentas"):
+        view = "Seguimiento de Rentas"
+
+if view == "Registro de Equipos":
     st.subheader("Registrar Nuevo Equipo")
     with st.form("form_equipo"):
         id_equipo = st.text_input("ID del Equipo")
@@ -37,8 +50,7 @@ if menu == "Registro de Equipos":
         df.to_csv("db/equipos.csv", index=False)
         st.success("Equipo registrado correctamente")
 
-# Registro de Renta
-elif menu == "Registro de Renta":
+elif view == "Registro de Renta":
     st.subheader("Registrar Nueva Renta")
     equipos = pd.read_csv("db/equipos.csv")
     disponibles = equipos[equipos.estado == "disponible"]
@@ -67,8 +79,7 @@ elif menu == "Registro de Renta":
             equipos.to_csv("db/equipos.csv", index=False)
             st.success("Renta registrada correctamente")
 
-# Seguimiento
-elif menu == "Seguimiento de Rentas":
+elif view == "Seguimiento de Rentas":
     st.subheader("Seguimiento de Rentas")
     df = pd.read_csv("db/rentas.csv")
 
@@ -85,3 +96,37 @@ elif menu == "Seguimiento de Rentas":
         if not proximas.empty:
             st.warning("⚠️ Rentas próximas a vencer:")
             st.dataframe(proximas[["id_renta", "cliente", "id_equipo", "fecha_fin", "dias_restantes"]])
+
+# Instrucciones para archivos adicionales
+if st.sidebar.button("📄 Mostrar instrucciones de descarga"):
+    st.markdown("""
+    ### Archivos adicionales para tu repositorio:
+
+    **1. `requirements.txt`**
+    ```
+    streamlit
+    pandas
+    ```
+
+    **2. `README.md`**
+    ```markdown
+    # Rental App Streamlit
+
+    Aplicación web con Streamlit para registrar y hacer seguimiento de rentas de equipo de cómputo.
+
+    ## Funcionalidades
+    - Registro de equipos
+    - Registro de rentas
+    - Seguimiento de rentas próximas a vencer
+
+    ## Requisitos
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+    ## Ejecución
+    ```bash
+    streamlit run app.py
+    ```
+    ```
+    """)
