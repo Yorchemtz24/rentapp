@@ -1,4 +1,3 @@
-streamlit
-pandas
-bcrypt
-sqlite3
+streamlit==1.38.0
+pandas==2.2.2
+bcrypt==4.2.0
