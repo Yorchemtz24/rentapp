@@ -7,6 +7,7 @@ import bcrypt
 import re
 from github import Github
 import base64
+import json
 
 # Configurar la página al inicio
 st.set_page_config(page_title="Arrendamiento MarTech Rent", layout="wide")
@@ -107,9 +108,10 @@ def initialize_db():
                 id_renta TEXT PRIMARY KEY,
                 cliente TEXT,
                 contacto TEXT,
-                id_equipo TEXT,
+                equipos TEXT,  -- Lista de equipos en formato JSON
                 fecha_inicio TEXT,
                 fecha_fin TEXT,
+                subtotal REAL,
                 precio REAL
             )
         """)
@@ -322,30 +324,59 @@ else:
                 st.markdown(f"**📞 Contacto:** {contacto}")
                 st.markdown(f"**✉️ Correo:** {correo}")
 
-                equipo = st.selectbox("Equipo", disponibles.id_equipo.tolist())
+                # Selección de múltiples equipos
+                equipos_seleccionados = st.multiselect("Seleccionar Equipos", disponibles.id_equipo.tolist())
+
+                # Diccionario para almacenar precios de los equipos seleccionados
+                precios_equipos = {}
+                if equipos_seleccionados:
+                    st.subheader("Precios de los Equipos")
+                    for equipo in equipos_seleccionados:
+                        precio = st.number_input(f"Precio de Renta para {equipo}", min_value=0.0, step=0.01, key=f"precio_{equipo}")
+                        precios_equipos[equipo] = precio
+
+                # Calcular subtotal
+                subtotal = sum(precios_equipos.values()) if precios_equipos else 0.0
+                st.markdown(f"**Subtotal (sin IVA):** ${subtotal:.2f}")
+
+                # Checkbox para incluir IVA del 16%
+                incluir_iva = st.checkbox("Incluir IVA del 16% (México)")
+                iva = subtotal * 0.16 if incluir_iva else 0.0
+                total = subtotal + iva
+
+                # Mostrar desglose
+                if incluir_iva:
+                    st.markdown(f"**IVA (16%):** ${iva:.2f}")
+                st.markdown(f"**Total:** ${total:.2f}")
+
                 fecha_inicio = st.date_input("Fecha de Inicio", value=datetime.now())
                 fecha_fin = st.date_input("Fecha de Fin", value=datetime.now() + timedelta(days=7))
-                precio = st.number_input("Precio de Renta", min_value=0.0, step=0.01)
                 submitted = st.form_submit_button("Registrar Renta")
 
                 if submitted:
-                    if fecha_fin <= fecha_inicio:
+                    if not equipos_seleccionados:
+                        st.error("❌ Debe seleccionar al menos un equipo")
+                    elif fecha_fin <= fecha_inicio:
                         st.error("❌ La fecha de fin debe ser posterior a la fecha de inicio")
-                    elif precio <= 0:
-                        st.error("❌ El precio debe ser mayor a 0")
+                    elif subtotal <= 0:
+                        st.error("❌ El subtotal debe ser mayor a 0")
                     else:
-                        nuevo = pd.DataFrame([[nuevo_id_renta, cliente_seleccionado, contacto, equipo, 
-                                             fecha_inicio, fecha_fin, precio]], 
-                                            columns=["id_renta", "cliente", "contacto", "id_equipo", 
-                                                    "fecha_inicio", "fecha_fin", "precio"])
+                        # Almacenar la lista de equipos como JSON
+                        equipos_json = json.dumps(equipos_seleccionados)
+                        nuevo = pd.DataFrame([[nuevo_id_renta, cliente_seleccionado, contacto, equipos_json, 
+                                             fecha_inicio, fecha_fin, subtotal, total]], 
+                                            columns=["id_renta", "cliente", "contacto", "equipos", 
+                                                    "fecha_inicio", "fecha_fin", "subtotal", "precio"])
                         st.write(f"Attempting to register renta: {nuevo.to_dict()}")
                         df_rentas = pd.concat([df_rentas, nuevo], ignore_index=True)
                         if write_table("rentas", df_rentas):
-                            equipos.loc[equipos.id_equipo == equipo, "estado"] = "rentado"
+                            # Actualizar el estado de los equipos a "rentado"
+                            for equipo in equipos_seleccionados:
+                                equipos.loc[equipos.id_equipo == equipo, "estado"] = "rentado"
                             if write_table("equipos", equipos):
                                 st.success("✅ Renta registrada correctamente")
                             else:
-                                st.error("❌ Fallo al actualizar el estado del equipo")
+                                st.error("❌ Fallo al actualizar el estado de los equipos")
                         else:
                             st.error("❌ Fallo al registrar la renta")
 
@@ -357,6 +388,8 @@ else:
             st.info("ℹ️ No hay rentas registradas.")
         else:
             try:
+                # Convertir la columna equipos de JSON a lista
+                df["equipos"] = df["equipos"].apply(json.loads)
                 df["fecha_fin"] = pd.to_datetime(df["fecha_fin"])
                 hoy = datetime.now()
                 df["dias_restantes"] = (df["fecha_fin"] - hoy).dt.days
@@ -365,9 +398,9 @@ else:
                 proximas = df[df.dias_restantes <= 3]
                 if not proximas.empty:
                     st.warning("⚠️ Rentas próximas a vencer:")
-                    st.dataframe(proximas[["id_renta", "cliente", "id_equipo", "fecha_fin", "dias_restantes"]])
+                    st.dataframe(proximas[["id_renta", "cliente", "equipos", "fecha_fin", "dias_restantes"]])
             except Exception as e:
-                st.error(f"❌ Error al procesar fechas: {e}")
+                st.error(f"❌ Error al procesar fechas o equipos: {e}")
 
     elif view == "📦 Inventario":
         st.subheader("📦 Inventario de Equipos")
@@ -383,7 +416,8 @@ else:
                 with col1:
                     equipo_a_editar = st.selectbox("Seleccionar Equipo a Editar", equipos.id_equipo.tolist(), key="edit_equipo_select")
                 with col2:
-                    if st.button("✏️ Editar", key="edit_equipo_button"):
+                    edit_button = st.button("✏️ Editar", key="edit_equipo_button")
+                    if edit_button:
                         st.session_state.edit_equipo_active = True
                         st.session_state.selected_equipo_id = equipo_a_editar
 
@@ -425,7 +459,8 @@ else:
                 with col1:
                     cliente_a_editar = st.selectbox("Seleccionar Cliente a Editar", df_clientes.id_cliente.tolist(), key="edit_cliente_select")
                 with col2:
-                    if st.button("✏️ Editar", key="edit_cliente_button"):
+                    edit_button = st.button("✏️ Editar", key="edit_cliente_button")
+                    if edit_button:
                         st.session_state.edit_cliente_active = True
                         st.session_state.selected_cliente_id = cliente_a_editar
 
@@ -462,6 +497,8 @@ else:
         st.subheader("📁 Listado de Rentas Realizadas")
         df_rentas = read_table("rentas")
         if not df_rentas.empty:
+            # Convertir la columna equipos de JSON a lista
+            df_rentas["equipos"] = df_rentas["equipos"].apply(json.loads)
             st.dataframe(df_rentas)
         else:
             st.info("ℹ️ No hay rentas registradas.")
@@ -470,7 +507,10 @@ else:
         st.subheader("✅ Finalizar Renta")
         df_rentas = read_table("rentas")
         equipos = read_table("equipos")
-        rentas_activas = df_rentas[df_rentas.id_equipo.isin(equipos[equipos.estado == "rentado"].id_equipo)]
+        # Convertir la columna equipos de JSON a lista
+        df_rentas["equipos"] = df_rentas["equipos"].apply(json.loads)
+        # Filtrar rentas activas (donde al menos un equipo sigue rentado)
+        rentas_activas = df_rentas[df_rentas.equipos.apply(lambda eqs: any(equipos[equipos.id_equipo == eq].estado.iloc[0] == "rentado" for eq in eqs if not equipos[equipos.id_equipo == eq].empty))]
 
         if rentas_activas.empty:
             st.info("ℹ️ No hay rentas activas para finalizar.")
@@ -480,11 +520,14 @@ else:
                 submitted = st.form_submit_button("Finalizar Renta")
 
                 if submitted:
-                    id_equipo = rentas_activas[rentas_activas.id_renta == renta_seleccionada].id_equipo.iloc[0]
-                    equipos.loc[equipos.id_equipo == id_equipo, "estado"] = "disponible"
+                    equipos_renta = rentas_activas[rentas_activas.id_renta == renta_seleccionada].equipos.iloc[0]
+                    for equipo in equipos_renta:
+                        equipos.loc[equipos.id_equipo == equipo, "estado"] = "disponible"
                     df_rentas = df_rentas[df_rentas.id_renta != renta_seleccionada]
+                    # Convertir la columna equipos de vuelta a JSON para guardar
+                    df_rentas["equipos"] = df_rentas["equipos"].apply(json.dumps)
                     st.write(f"Attempting to finalize renta {renta_seleccionada}")
                     if write_table("equipos", equipos) and write_table("rentas", df_rentas):
-                        st.success(f"✅ Renta {renta_seleccionada} finalizada. Equipo disponible nuevamente.")
+                        st.success(f"✅ Renta {renta_seleccionada} finalizada. Equipos disponibles nuevamente.")
                     else:
                         st.error("❌ Fallo al finalizar la renta")
