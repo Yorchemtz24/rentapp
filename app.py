@@ -17,8 +17,8 @@ if not os.path.exists("db/rentas.csv"):
 if not os.path.exists("db/clientes.csv"):
     pd.DataFrame(columns=["id_cliente", "nombre", "contacto", "correo"]).to_csv("db/clientes.csv", index=False)
 
-st.set_page_config(page_title="App de Arrendamiento", layout="wide")
-st.title("📦 App de Arrendamiento de Equipos de Cómputo")
+st.set_page_config(page_title="Arrendamiento MarTech Rent", layout="wide")
+st.title("💻 Arrendamiento MarTech Rent")
 
 # Menú con botones en la barra lateral
 view = st.sidebar.radio("Navegación", [
@@ -26,13 +26,17 @@ view = st.sidebar.radio("Navegación", [
     "👤 Registro de Clientes",
     "📝 Nueva Renta",
     "🔍 Seguimiento de Rentas",
-    "📦 Inventario"
+    "📦 Inventario",
+    "📁 Registro de Clientes",
+    "📁 Registro de Rentas"
 ])
 
 if view == "📋 Registro de Equipos":
     st.subheader("Registrar Nuevo Equipo")
     with st.form("form_equipo"):
-        id_equipo = st.text_input("ID del Equipo")
+        df_equipos = pd.read_csv("db/equipos.csv")
+        nuevo_id = f"MC{len(df_equipos) + 1:04d}"
+        st.text_input("ID del Equipo", value=nuevo_id, disabled=True)
         marca = st.text_input("Marca")
         modelo = st.text_input("Modelo")
         caracteristicas = st.text_area("Características")
@@ -40,17 +44,16 @@ if view == "📋 Registro de Equipos":
         submitted = st.form_submit_button("Registrar Equipo")
 
         if submitted:
-            df = pd.read_csv("db/equipos.csv")
-            nuevo = pd.DataFrame([[id_equipo, marca, modelo, caracteristicas, estado]], columns=df.columns)
-            df = pd.concat([df, nuevo], ignore_index=True)
-            df.to_csv("db/equipos.csv", index=False)
+            nuevo = pd.DataFrame([[nuevo_id, marca, modelo, caracteristicas, estado]], columns=df_equipos.columns)
+            df_equipos = pd.concat([df_equipos, nuevo], ignore_index=True)
+            df_equipos.to_csv("db/equipos.csv", index=False)
             st.success("Equipo registrado correctamente")
 
 elif view == "👤 Registro de Clientes":
     st.subheader("Registrar Nuevo Cliente")
     with st.form("form_cliente"):
         df_clientes = pd.read_csv("db/clientes.csv")
-        nuevo_id = f"CL-{len(df_clientes) + 1:04d}"
+        nuevo_id = f"MC{len(df_clientes) + 1:04d}"
         st.text_input("ID del Cliente", value=nuevo_id, disabled=True)
         nombre = st.text_input("Nombre Completo")
         contacto = st.text_input("Teléfono")
@@ -97,7 +100,6 @@ elif view == "📝 Nueva Renta":
                 df_rentas = pd.concat([df_rentas, nuevo], ignore_index=True)
                 df_rentas.to_csv("db/rentas.csv", index=False)
 
-                # Actualizar estado del equipo
                 equipos.loc[equipos.id_equipo == equipo, "estado"] = "rentado"
                 equipos.to_csv("db/equipos.csv", index=False)
                 st.success("Renta registrada correctamente")
@@ -124,3 +126,13 @@ elif view == "📦 Inventario":
     st.subheader("Inventario de Equipos")
     equipos = pd.read_csv("db/equipos.csv")
     st.dataframe(equipos.sort_values(by="estado"))
+
+elif view == "📁 Registro de Clientes":
+    st.subheader("Listado de Clientes Registrados")
+    df_clientes = pd.read_csv("db/clientes.csv")
+    st.dataframe(df_clientes)
+
+elif view == "📁 Registro de Rentas":
+    st.subheader("Listado de Rentas Realizadas")
+    df_rentas = pd.read_csv("db/rentas.csv")
+    st.dataframe(df_rentas)
