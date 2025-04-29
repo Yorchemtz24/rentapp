@@ -13,7 +13,7 @@ st.set_page_config(page_title="Arrendamiento MarTech Rent", layout="wide")
 
 # Configuración de GitHub (usar secretos en Streamlit Cloud)
 GITHUB_TOKEN = st.secrets.get("GITHUB_TOKEN", None)
-REPO_NAME = "Yorchemtz24/rentapp"  # Actualizado al repositorio correcto
+REPO_NAME = "Yorchemtz24/rentapp"
 
 if not GITHUB_TOKEN:
     st.error("GitHub token not configured. Please set GITHUB_TOKEN in Streamlit secrets.")
@@ -186,6 +186,12 @@ else:
         "✅ Finalizar Renta"
     ])
 
+    # Botón de Cerrar Sesión en la barra lateral
+    if st.sidebar.button("🚪 Cerrar Sesión"):
+        st.session_state.authenticated = False
+        st.success("Sesión cerrada")
+        st.rerun()
+
     if view == "📋 Registro de Equipos":
         st.subheader("Registrar Nuevo Equipo")
         with st.form("form_equipo"):
@@ -314,6 +320,30 @@ else:
         equipos = read_table("equipos")
         if not equipos.empty:
             st.dataframe(equipos.sort_values(by="estado"))
+            
+            # Sección para editar equipos
+            st.subheader("Editar Equipo")
+            equipo_a_editar = st.selectbox("Seleccionar Equipo a Editar", equipos.id_equipo.tolist(), key="edit_equipo_select")
+            equipo_info = equipos[equipos.id_equipo == equipo_a_editar].iloc[0]
+
+            with st.form("form_editar_equipo"):
+                marca_edit = st.text_input("Marca", value=equipo_info.marca)
+                modelo_edit = st.text_input("Modelo", value=equipo_info.modelo)
+                caracteristicas_edit = st.text_area("Características", value=equipo_info.caracteristicas)
+                estado_edit = st.selectbox("Estado", ["disponible", "rentado", "mantenimiento"], index=["disponible", "rentado", "mantenimiento"].index(equipo_info.estado))
+                submitted = st.form_submit_button("Guardar Cambios")
+
+                if submitted:
+                    if not marca_edit or not modelo_edit:
+                        st.error("Marca y modelo son obligatorios")
+                    else:
+                        equipos.loc[equipos.id_equipo == equipo_a_editar, ["marca", "modelo", "caracteristicas", "estado"]] = \
+                            [marca_edit, modelo_edit, caracteristicas_edit, estado_edit]
+                        if write_table("equipos", equipos):
+                            st.success(f"Equipo {equipo_a_editar} actualizado correctamente")
+                            st.rerun()
+                        else:
+                            st.error("Fallo al actualizar el equipo")
         else:
             st.info("No hay equipos registrados.")
 
@@ -322,6 +352,33 @@ else:
         df_clientes = read_table("clientes")
         if not df_clientes.empty:
             st.dataframe(df_clientes)
+
+            # Sección para editar clientes
+            st.subheader("Editar Cliente")
+            cliente_a_editar = st.selectbox("Seleccionar Cliente a Editar", df_clientes.id_cliente.tolist(), key="edit_cliente_select")
+            cliente_info = df_clientes[df_clientes.id_cliente == cliente_a_editar].iloc[0]
+
+            with st.form("form_editar_cliente"):
+                nombre_edit = st.text_input("Nombre Completo", value=cliente_info.nombre)
+                contacto_edit = st.text_input("Teléfono", value=cliente_info.contacto)
+                correo_edit = st.text_input("Correo Electrónico", value=cliente_info.correo)
+                submitted = st.form_submit_button("Guardar Cambios")
+
+                if submitted:
+                    if not nombre_edit or not contacto_edit or not correo_edit:
+                        st.error("Todos los campos son obligatorios")
+                    elif not validate_email(correo_edit):
+                        st.error("Correo electrónico inválido")
+                    elif not validate_phone(contacto_edit):
+                        st.error("Teléfono inválido (debe tener 10-15 dígitos)")
+                    else:
+                        df_clientes.loc[df_clientes.id_cliente == cliente_a_editar, ["nombre", "contacto", "correo"]] = \
+                            [nombre_edit, contacto_edit, correo_edit]
+                        if write_table("clientes", df_clientes):
+                            st.success(f"Cliente {cliente_a_editar} actualizado correctamente")
+                            st.rerun()
+                        else:
+                            st.error("Fallo al actualizar el cliente")
         else:
             st.info("No hay clientes registrados.")
 
