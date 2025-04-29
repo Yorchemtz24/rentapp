@@ -49,15 +49,16 @@ if view == "📋 Registro de Equipos":
 elif view == "👤 Registro de Clientes":
     st.subheader("Registrar Nuevo Cliente")
     with st.form("form_cliente"):
-        id_cliente = st.text_input("ID del Cliente")
+        df_clientes = pd.read_csv("db/clientes.csv")
+        nuevo_id = f"CL-{len(df_clientes) + 1:04d}"
+        st.text_input("ID del Cliente", value=nuevo_id, disabled=True)
         nombre = st.text_input("Nombre Completo")
         contacto = st.text_input("Teléfono")
         correo = st.text_input("Correo Electrónico")
         submitted = st.form_submit_button("Registrar Cliente")
 
         if submitted:
-            df_clientes = pd.read_csv("db/clientes.csv")
-            nuevo = pd.DataFrame([[id_cliente, nombre, contacto, correo]], columns=df_clientes.columns)
+            nuevo = pd.DataFrame([[nuevo_id, nombre, contacto, correo]], columns=df_clientes.columns)
             df_clientes = pd.concat([df_clientes, nuevo], ignore_index=True)
             df_clientes.to_csv("db/clientes.csv", index=False)
             st.success("Cliente registrado correctamente")
@@ -67,6 +68,7 @@ elif view == "📝 Nueva Renta":
     equipos = pd.read_csv("db/equipos.csv")
     disponibles = equipos[equipos.estado == "disponible"]
     clientes = pd.read_csv("db/clientes.csv")
+    df_rentas = pd.read_csv("db/rentas.csv")
 
     if disponibles.empty:
         st.warning("No hay equipos disponibles para rentar.")
@@ -74,7 +76,8 @@ elif view == "📝 Nueva Renta":
         st.warning("No hay clientes registrados.")
     else:
         with st.form("form_renta"):
-            id_renta = st.text_input("ID de Renta")
+            nuevo_id_renta = f"RE-{len(df_rentas) + 1:04d}"
+            st.text_input("ID de Renta", value=nuevo_id_renta, disabled=True)
             cliente_seleccionado = st.selectbox("Cliente", clientes.nombre.tolist())
 
             cliente_info = clientes[clientes.nombre == cliente_seleccionado].iloc[0]
@@ -90,8 +93,7 @@ elif view == "📝 Nueva Renta":
             submitted = st.form_submit_button("Registrar Renta")
 
             if submitted:
-                df_rentas = pd.read_csv("db/rentas.csv")
-                nuevo = pd.DataFrame([[id_renta, cliente_seleccionado, contacto, equipo, fecha_inicio, fecha_fin, precio]], columns=df_rentas.columns)
+                nuevo = pd.DataFrame([[nuevo_id_renta, cliente_seleccionado, contacto, equipo, fecha_inicio, fecha_fin, precio]], columns=df_rentas.columns)
                 df_rentas = pd.concat([df_rentas, nuevo], ignore_index=True)
                 df_rentas.to_csv("db/rentas.csv", index=False)
 
