@@ -8,6 +8,7 @@ import re
 from github import Github
 import base64
 import json
+import numpy as np
 
 # Configurar la página al inicio
 st.set_page_config(page_title="Arrendamiento MarTech Rent", layout="wide")
@@ -92,7 +93,8 @@ def initialize_db():
                 marca TEXT,
                 modelo TEXT,
                 caracteristicas TEXT,
-                estado TEXT
+                estado TEXT,
+                precio_base REAL
             )
         """)
         cursor.execute("""
@@ -258,14 +260,17 @@ else:
             modelo = st.text_input("Modelo")
             caracteristicas = st.text_area("Características")
             estado = st.selectbox("Estado", ["disponible", "rentado", "mantenimiento"])
+            precio_base = st.number_input("Precio Base de Renta ($)", min_value=0.0, step=0.01)
             submitted = st.form_submit_button("Registrar Equipo")
 
             if submitted:
                 if not marca or not modelo:
                     st.error("❌ Marca y modelo son obligatorios")
+                elif precio_base <= 0:
+                    st.error("❌ El precio base debe ser mayor a 0")
                 else:
-                    nuevo = pd.DataFrame([[nuevo_id, marca, modelo, caracteristicas, estado]], 
-                                        columns=["id_equipo", "marca", "modelo", "caracteristicas", "estado"])
+                    nuevo = pd.DataFrame([[nuevo_id, marca, modelo, caracteristicas, estado, precio_base]], 
+                                        columns=["id_equipo", "marca", "modelo", "caracteristicas", "estado", "precio_base"])
                     st.write(f"Attempting to register equipo: {nuevo.to_dict()}")
                     df_equipos = pd.concat([df_equipos, nuevo], ignore_index=True)
                     if write_table("equipos", df_equipos):
@@ -335,10 +340,14 @@ else:
                     st.subheader("Precios de los Equipos")
                     # Para cada equipo seleccionado, mostrar un campo para ingresar su precio
                     for equipo in equipos_seleccionados:
+                        # Obtener el precio base del equipo (si existe)
+                        precio_base = disponibles[disponibles.id_equipo == equipo].precio_base.iloc[0]
+                        precio_base = float(precio_base) if pd.notnull(precio_base) else 0.0
                         precio = st.number_input(
-                            f"Precio de Renta para {equipo}", 
+                            f"Precio de Renta para {equipo} (Precio base: ${precio_base:.2f})", 
                             min_value=0.0, 
                             step=0.01, 
+                            value=precio_base,
                             key=f"precio_{equipo}"
                         )
                         precios_equipos[equipo] = precio
@@ -402,8 +411,8 @@ else:
             st.info("ℹ️ No hay rentas registradas.")
         else:
             try:
-                # Convertir la columna equipos de JSON a lista
-                df["equipos"] = df["equipos"].apply(json.loads)
+                # Manejar valores NaN o no válidos en la columna equipos
+                df["equipos"] = df["equipos"].apply(lambda x: json.loads(x) if isinstance(x, str) and x else [])
                 df["fecha_fin"] = pd.to_datetime(df["fecha_fin"])
                 hoy = datetime.now()
                 df["dias_restantes"] = (df["fecha_fin"] - hoy).dt.days
@@ -443,14 +452,17 @@ else:
                         modelo_edit = st.text_input("Modelo", value=equipo_info.modelo)
                         caracteristicas_edit = st.text_area("Características", value=equipo_info.caracteristicas)
                         estado_edit = st.selectbox("Estado", ["disponible", "rentado", "mantenimiento"], index=["disponible", "rentado", "mantenimiento"].index(equipo_info.estado))
+                        precio_base_edit = st.number_input("Precio Base de Renta ($)", min_value=0.0, step=0.01, value=float(equipo_info.precio_base) if pd.notnull(equipo_info.precio_base) else 0.0)
                         submitted = st.form_submit_button("✅ Guardar Cambios")
 
                         if submitted:
                             if not marca_edit or not modelo_edit:
                                 st.error("❌ Marca y modelo son obligatorios")
+                            elif precio_base_edit <= 0:
+                                st.error("❌ El precio base debe ser mayor a 0")
                             else:
-                                equipos.loc[equipos.id_equipo == equipo_a_editar, ["marca", "modelo", "caracteristicas", "estado"]] = \
-                                    [marca_edit, modelo_edit, caracteristicas_edit, estado_edit]
+                                equipos.loc[equipos.id_equipo == equipo_a_editar, ["marca", "modelo", "caracteristicas", "estado", "precio_base"]] = \
+                                    [marca_edit, modelo_edit, caracteristicas_edit, estado_edit, precio_base_edit]
                                 if write_table("equipos", equipos):
                                     st.success(f"✅ Equipo {equipo_a_editar} actualizado correctamente")
                                     st.session_state.edit_equipo_active = False  # Ocultar el formulario
@@ -511,8 +523,8 @@ else:
         st.subheader("📁 Listado de Rentas Realizadas")
         df_rentas = read_table("rentas")
         if not df_rentas.empty:
-            # Convertir la columna equipos de JSON a lista
-            df_rentas["equipos"] = df_rentas["equipos"].apply(json.loads)
+            # Manejar valores NaN o no válidos en la columna equipos
+            df_rentas["equipos"] = df_rentas["equipos"].apply(lambda x: json.loads(x) if isinstance(x, str) and x else [])
             st.dataframe(df_rentas)
         else:
             st.info("ℹ️ No hay rentas registradas.")
@@ -521,8 +533,8 @@ else:
         st.subheader("✅ Finalizar Renta")
         df_rentas = read_table("rentas")
         equipos = read_table("equipos")
-        # Convertir la columna equipos de JSON a lista
-        df_rentas["equipos"] = df_rentas["equipos"].apply(json.loads)
+        # Manejar valores NaN o no válidos en la columna equipos
+        df_rentas["equipos"] = df_rentas["equipos"].apply(lambda x: json.loads(x) if isinstance(x, str) and x else [])
         # Filtrar rentas activas (donde al menos un equipo sigue rentado)
         rentas_activas = df_rentas[df_rentas.equipos.apply(lambda eqs: any(equipos[equipos.id_equipo == eq].estado.iloc[0] == "rentado" for eq in eqs if not equipos[equipos.id_equipo == eq].empty))]
 
