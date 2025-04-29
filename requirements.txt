@@ -1,4 +1,4 @@
 streamlit
 pandas
 bcrypt
-filelock
+sqlite3
