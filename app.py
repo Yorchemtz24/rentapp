@@ -12,8 +12,11 @@ import base64
 st.set_page_config(page_title="Arrendamiento MarTech Rent", layout="wide")
 
 # Configuración de GitHub (usar secretos en Streamlit Cloud)
-GITHUB_TOKEN = st.secrets.get("GITHUB_TOKEN", "TU_TOKEN_AQUI")  # Reemplaza o usa secretos
-REPO_NAME = "TU_USUARIO/TU_REPOSITORIO"  # Ejemplo: "tu_usuario/rentapp"
+GITHUB_TOKEN = st.secrets.get("GITHUB_TOKEN", None)
+REPO_NAME = "Yorchemtz24/rentapp"  # Actualizado al repositorio correcto
+
+if not GITHUB_TOKEN:
+    st.error("GitHub token not configured. Please set GITHUB_TOKEN in Streamlit secrets.")
 
 # Crear carpeta de base de datos si no existe
 DB_DIR = "db"
@@ -86,6 +89,9 @@ initialize_db()
 
 # Función para sincronizar database.db con GitHub
 def update_db_in_github():
+    if not GITHUB_TOKEN:
+        st.error("Cannot update GitHub: GITHUB_TOKEN is not set.")
+        return
     try:
         g = Github(GITHUB_TOKEN)
         repo = g.get_repo(REPO_NAME)
