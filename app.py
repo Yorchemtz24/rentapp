@@ -9,7 +9,11 @@ import re
 # Crear carpeta de base de datos si no existe
 DB_DIR = "db"
 if not os.path.exists(DB_DIR):
-    os.makedirs(DB_DIR)
+    try:
+        os.makedirs(DB_DIR)
+        st.write(f"Created directory: {DB_DIR}")
+    except Exception as e:
+        st.error(f"Error creating directory {DB_DIR}: {e}")
 
 # Archivos CSV
 EQUIPOS_CSV = f"{DB_DIR}/equipos.csv"
@@ -21,14 +25,20 @@ USUARIOS_CSV = f"{DB_DIR}/usuarios.csv"
 def initialize_csv():
     if not os.path.exists(EQUIPOS_CSV):
         pd.DataFrame(columns=["id_equipo", "marca", "modelo", "caracteristicas", "estado"]).to_csv(EQUIPOS_CSV, index=False)
+        st.write(f"Created {EQUIPOS_CSV}")
     if not os.path.exists(RENTAS_CSV):
         pd.DataFrame(columns=["id_renta", "cliente", "contacto", "id_equipo", "fecha_inicio", "fecha_fin", "precio"]).to_csv(RENTAS_CSV, index=False)
+        st.write(f"Created {RENTAS_CSV}")
     if not os.path.exists(CLIENTES_CSV):
         pd.DataFrame(columns=["id_cliente", "nombre", "contacto", "correo"]).to_csv(CLIENTES_CSV, index=False)
+        st.write(f"Created {CLIENTES_CSV}")
     if not os.path.exists(USUARIOS_CSV):
-        # Crear usuario admin con contraseña hasheada
-        hashed_password = bcrypt.hashpw("12345".encode('utf-8'), bcrypt.gensalt())
-        pd.DataFrame([{"usuario": "admin", "password": hashed_password.decode('utf-8')}]).to_csv(USUARIOS_CSV, index=False)
+        try:
+            hashed_password = bcrypt.hashpw("12345".encode('utf-8'), bcrypt.gensalt())
+            pd.DataFrame([{"usuario": "admin", "password": hashed_password.decode('utf-8')}]).to_csv(USUARIOS_CSV, index=False)
+            st.write(f"Created {USUARIOS_CSV} with admin user")
+        except Exception as e:
+            st.error(f"Error creating {USUARIOS_CSV}: {e}")
 
 initialize_csv()
 
@@ -73,14 +83,27 @@ if not st.session_state.authenticated:
         submitted = st.form_submit_button("Iniciar Sesión")
 
         if submitted:
-            df_usuarios = read_csv_safe(USUARIOS_CSV)
-            user = df_usuarios[df_usuarios["usuario"] == username]
-            if not user.empty and bcrypt.checkpw(password.encode('utf-8'), user.iloc[0]["password"].encode('utf-8')):
-                st.session_state.authenticated = True
-                st.success("Inicio de sesión exitoso")
-                st.rerun()
+            if not username or not password:
+                st.error("Por favor, ingrese usuario y contraseña")
             else:
-                st.error("Usuario o contraseña incorrectos")
+                df_usuarios = read_csv_safe(USUARIOS_CSV)
+                user = df_usuarios[df_usuarios["usuario"] == username]
+                if user.empty:
+                    st.error("Usuario no encontrado")
+                else:
+                    stored_password = user.iloc[0]["password"]
+                    try:
+                        if isinstance(stored_password, str):
+                            stored_password = stored_password.encode('utf-8')
+                        if bcrypt.checkpw(password.encode('utf-8'), stored_password):
+                            st.session_state.authenticated = True
+                            st.success("Inicio de sesión exitoso")
+                            st.rerun()
+                        else:
+                            st.error("Contraseña incorrecta")
+                    except Exception as e:
+                        st.error(f"Error al verificar contraseña: {e}")
+                        st.write(f"Stored password: {stored_password.decode('utf-8') if isinstance(stored_password, bytes) else stored_password}")
 else:
     # Menú con botones en la barra lateral
     view = st.sidebar.radio("Navegación", [
