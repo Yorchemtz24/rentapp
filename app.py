@@ -14,11 +14,14 @@ if not os.path.exists("db/equipos.csv"):
 if not os.path.exists("db/rentas.csv"):
     pd.DataFrame(columns=["id_renta", "cliente", "contacto", "id_equipo", "fecha_inicio", "fecha_fin", "precio"]).to_csv("db/rentas.csv", index=False)
 
+if not os.path.exists("db/clientes.csv"):
+    pd.DataFrame(columns=["id_cliente", "nombre", "contacto", "correo"]).to_csv("db/clientes.csv", index=False)
+
 st.set_page_config(page_title="App de Arrendamiento", layout="wide")
 st.title("📦 App de Arrendamiento de Equipos de Cómputo")
 
 # Menú con botones en la barra lateral
-view = st.sidebar.radio("Navegación", ["📋 Registro de Equipos", "📝 Registro de Renta", "🔍 Seguimiento de Rentas"])
+view = st.sidebar.radio("Navegación", ["📋 Registro de Equipos", "📝 Registro de Renta", "🔍 Seguimiento de Rentas", "👤 Registro de Clientes"])
 
 if view == "📋 Registro de Equipos":
     st.subheader("Registrar Nuevo Equipo")
@@ -83,3 +86,19 @@ elif view == "🔍 Seguimiento de Rentas":
         if not proximas.empty:
             st.warning("⚠️ Rentas próximas a vencer:")
             st.dataframe(proximas[["id_renta", "cliente", "id_equipo", "fecha_fin", "dias_restantes"]])
+
+elif view == "👤 Registro de Clientes":
+    st.subheader("Registrar Nuevo Cliente")
+    with st.form("form_cliente"):
+        id_cliente = st.text_input("ID del Cliente")
+        nombre = st.text_input("Nombre Completo")
+        contacto = st.text_input("Teléfono")
+        correo = st.text_input("Correo Electrónico")
+        submitted = st.form_submit_button("Registrar Cliente")
+
+        if submitted:
+            df_clientes = pd.read_csv("db/clientes.csv")
+            nuevo = pd.DataFrame([[id_cliente, nombre, contacto, correo]], columns=df_clientes.columns)
+            df_clientes = pd.concat([df_clientes, nuevo], ignore_index=True)
+            df_clientes.to_csv("db/clientes.csv", index=False)
+            st.success("Cliente registrado correctamente")
