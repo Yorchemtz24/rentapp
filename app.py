@@ -8,6 +8,9 @@ import re
 from github import Github
 import base64
 
+# Configurar la página al inicio
+st.set_page_config(page_title="Arrendamiento MarTech Rent", layout="wide")
+
 # Configuración de GitHub (usar secretos en Streamlit Cloud)
 GITHUB_TOKEN = st.secrets.get("GITHUB_TOKEN", "TU_TOKEN_AQUI")  # Reemplaza o usa secretos
 REPO_NAME = "TU_USUARIO/TU_REPOSITORIO"  # Ejemplo: "tu_usuario/rentapp"
@@ -19,9 +22,9 @@ DB_PATH = f"{DB_DIR}/database.db"
 if not os.path.exists(DB_DIR):
     try:
         os.makedirs(DB_DIR)
-        st.write(f"Created directory: {DB_DIR}")
+        print(f"Created directory: {DB_DIR}")
     except Exception as e:
-        st.error(f"Error creating directory {DB_DIR}: {e}")
+        print(f"Error creating directory {DB_DIR}: {e}")
 
 # Inicializar base de datos SQLite
 def initialize_db():
@@ -71,13 +74,13 @@ def initialize_db():
             hashed_password = bcrypt.hashpw("12345".encode('utf-8'), bcrypt.gensalt())
             cursor.execute("INSERT INTO usuarios (usuario, password) VALUES (?, ?)", 
                           ("admin", hashed_password.decode('utf-8')))
-            st.write("Created admin user in usuarios table")
+            print("Created admin user in usuarios table")
 
         conn.commit()
         conn.close()
-        st.write(f"Initialized database: {DB_PATH}")
+        print(f"Initialized database: {DB_PATH}")
     except Exception as e:
-        st.error(f"Error initializing database: {e}")
+        print(f"Error initializing database: {e}")
 
 initialize_db()
 
@@ -127,9 +130,6 @@ def validate_email(email):
 def validate_phone(phone):
     pattern = r"^\+?\d{10,15}$"
     return re.match(pattern, phone) is not None
-
-# Configuración de la página
-st.set_page_config(page_title="Arrendamiento MarTech Rent", layout="wide")
 
 # Autenticación
 if "authenticated" not in st.session_state:
