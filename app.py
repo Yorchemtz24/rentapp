@@ -324,26 +324,41 @@ else:
             # Sección para editar equipos
             st.subheader("Editar Equipo")
             equipo_a_editar = st.selectbox("Seleccionar Equipo a Editar", equipos.id_equipo.tolist(), key="edit_equipo_select")
-            equipo_info = equipos[equipos.id_equipo == equipo_a_editar].iloc[0]
 
-            with st.form("form_editar_equipo"):
-                marca_edit = st.text_input("Marca", value=equipo_info.marca)
-                modelo_edit = st.text_input("Modelo", value=equipo_info.modelo)
-                caracteristicas_edit = st.text_area("Características", value=equipo_info.caracteristicas)
-                estado_edit = st.selectbox("Estado", ["disponible", "rentado", "mantenimiento"], index=["disponible", "rentado", "mantenimiento"].index(equipo_info.estado))
-                submitted = st.form_submit_button("Guardar Cambios")
+            # Inicializar estados en session_state si no existen
+            if "edit_equipo_active" not in st.session_state:
+                st.session_state.edit_equipo_active = False
+            if "selected_equipo_id" not in st.session_state:
+                st.session_state.selected_equipo_id = None
 
-                if submitted:
-                    if not marca_edit or not modelo_edit:
-                        st.error("Marca y modelo son obligatorios")
-                    else:
-                        equipos.loc[equipos.id_equipo == equipo_a_editar, ["marca", "modelo", "caracteristicas", "estado"]] = \
-                            [marca_edit, modelo_edit, caracteristicas_edit, estado_edit]
-                        if write_table("equipos", equipos):
-                            st.success(f"Equipo {equipo_a_editar} actualizado correctamente")
-                            st.rerun()
+            # Botón para desplegar el formulario de edición
+            if st.button("✏️ Editar", key="edit_equipo_button"):
+                st.session_state.edit_equipo_active = True
+                st.session_state.selected_equipo_id = equipo_a_editar
+
+            # Mostrar el formulario solo si se ha presionado "Editar"
+            if st.session_state.edit_equipo_active and st.session_state.selected_equipo_id == equipo_a_editar:
+                equipo_info = equipos[equipos.id_equipo == equipo_a_editar].iloc[0]
+                with st.form("form_editar_equipo"):
+                    marca_edit = st.text_input("Marca", value=equipo_info.marca)
+                    modelo_edit = st.text_input("Modelo", value=equipo_info.modelo)
+                    caracteristicas_edit = st.text_area("Características", value=equipo_info.caracteristicas)
+                    estado_edit = st.selectbox("Estado", ["disponible", "rentado", "mantenimiento"], index=["disponible", "rentado", "mantenimiento"].index(equipo_info.estado))
+                    submitted = st.form_submit_button("Guardar Cambios")
+
+                    if submitted:
+                        if not marca_edit or not modelo_edit:
+                            st.error("Marca y modelo son obligatorios")
                         else:
-                            st.error("Fallo al actualizar el equipo")
+                            equipos.loc[equipos.id_equipo == equipo_a_editar, ["marca", "modelo", "caracteristicas", "estado"]] = \
+                                [marca_edit, modelo_edit, caracteristicas_edit, estado_edit]
+                            if write_table("equipos", equipos):
+                                st.success(f"Equipo {equipo_a_editar} actualizado correctamente")
+                                st.session_state.edit_equipo_active = False  # Ocultar el formulario
+                                st.session_state.selected_equipo_id = None
+                                st.rerun()
+                            else:
+                                st.error("Fallo al actualizar el equipo")
         else:
             st.info("No hay equipos registrados.")
 
@@ -356,29 +371,44 @@ else:
             # Sección para editar clientes
             st.subheader("Editar Cliente")
             cliente_a_editar = st.selectbox("Seleccionar Cliente a Editar", df_clientes.id_cliente.tolist(), key="edit_cliente_select")
-            cliente_info = df_clientes[df_clientes.id_cliente == cliente_a_editar].iloc[0]
 
-            with st.form("form_editar_cliente"):
-                nombre_edit = st.text_input("Nombre Completo", value=cliente_info.nombre)
-                contacto_edit = st.text_input("Teléfono", value=cliente_info.contacto)
-                correo_edit = st.text_input("Correo Electrónico", value=cliente_info.correo)
-                submitted = st.form_submit_button("Guardar Cambios")
+            # Inicializar estados en session_state si no existen
+            if "edit_cliente_active" not in st.session_state:
+                st.session_state.edit_cliente_active = False
+            if "selected_cliente_id" not in st.session_state:
+                st.session_state.selected_cliente_id = None
 
-                if submitted:
-                    if not nombre_edit or not contacto_edit or not correo_edit:
-                        st.error("Todos los campos son obligatorios")
-                    elif not validate_email(correo_edit):
-                        st.error("Correo electrónico inválido")
-                    elif not validate_phone(contacto_edit):
-                        st.error("Teléfono inválido (debe tener 10-15 dígitos)")
-                    else:
-                        df_clientes.loc[df_clientes.id_cliente == cliente_a_editar, ["nombre", "contacto", "correo"]] = \
-                            [nombre_edit, contacto_edit, correo_edit]
-                        if write_table("clientes", df_clientes):
-                            st.success(f"Cliente {cliente_a_editar} actualizado correctamente")
-                            st.rerun()
+            # Botón para desplegar el formulario de edición
+            if st.button("✏️ Editar", key="edit_cliente_button"):
+                st.session_state.edit_cliente_active = True
+                st.session_state.selected_cliente_id = cliente_a_editar
+
+            # Mostrar el formulario solo si se ha presionado "Editar"
+            if st.session_state.edit_cliente_active and st.session_state.selected_cliente_id == cliente_a_editar:
+                cliente_info = df_clientes[df_clientes.id_cliente == cliente_a_editar].iloc[0]
+                with st.form("form_editar_cliente"):
+                    nombre_edit = st.text_input("Nombre Completo", value=cliente_info.nombre)
+                    contacto_edit = st.text_input("Teléfono", value=cliente_info.contacto)
+                    correo_edit = st.text_input("Correo Electrónico", value=cliente_info.correo)
+                    submitted = st.form_submit_button("Guardar Cambios")
+
+                    if submitted:
+                        if not nombre_edit or not contacto_edit or not correo_edit:
+                            st.error("Todos los campos son obligatorios")
+                        elif not validate_email(correo_edit):
+                            st.error("Correo electrónico inválido")
+                        elif not validate_phone(contacto_edit):
+                            st.error("Teléfono inválido (debe tener 10-15 dígitos)")
                         else:
-                            st.error("Fallo al actualizar el cliente")
+                            df_clientes.loc[df_clientes.id_cliente == cliente_a_editar, ["nombre", "contacto", "correo"]] = \
+                                [nombre_edit, contacto_edit, correo_edit]
+                            if write_table("clientes", df_clientes):
+                                st.success(f"Cliente {cliente_a_editar} actualizado correctamente")
+                                st.session_state.edit_cliente_active = False  # Ocultar el formulario
+                                st.session_state.selected_cliente_id = None
+                                st.rerun()
+                            else:
+                                st.error("Fallo al actualizar el cliente")
         else:
             st.info("No hay clientes registrados.")
 
