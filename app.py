@@ -35,8 +35,14 @@ def initialize_csv():
     if not os.path.exists(USUARIOS_CSV):
         try:
             hashed_password = bcrypt.hashpw("12345".encode('utf-8'), bcrypt.gensalt())
-            pd.DataFrame([{"usuario": "admin", "password": hashed_password.decode('utf-8')}]).to_csv(USUARIOS_CSV, index=False)
+            pd.DataFrame([{"usuario": "admin", "password": hashed_password.decode('utf-8')}], dtype=str).to_csv(USUARIOS_CSV, index=False)
             st.write(f"Created {USUARIOS_CSV} with admin user")
+            # Verificar que el archivo se creó correctamente
+            df_usuarios = pd.read_csv(USUARIOS_CSV, dtype=str)
+            if not df_usuarios.empty and df_usuarios.iloc[0]["password"].startswith('$2b$'):
+                st.write("Password hash in usuarios.csv is valid")
+            else:
+                st.error("Failed to create valid password hash in usuarios.csv")
         except Exception as e:
             st.error(f"Error creating {USUARIOS_CSV}: {e}")
 
@@ -46,6 +52,9 @@ initialize_csv()
 def read_csv_safe(file_path):
     try:
         with FileLock(f"{file_path}.lock"):
+            # Forzar tipo string para columnas sensibles
+            if file_path == USUARIOS_CSV:
+                return pd.read_csv(file_path, dtype={"usuario": str, "password": str})
             return pd.read_csv(file_path)
     except Exception as e:
         st.error(f"Error al leer {file_path}: {e}")
@@ -93,8 +102,11 @@ if not st.session_state.authenticated:
                 else:
                     stored_password = user.iloc[0]["password"]
                     try:
-                        if isinstance(stored_password, str):
-                            stored_password = stored_password.encode('utf-8')
+                        if not isinstance(stored_password, str):
+                            st.error(f"Tipo de contraseña almacenada inválido: {type(stored_password)}")
+                            st.write(f"Contenido de stored_password: {stored_password}")
+                            raise ValueError("La contraseña almacenada no es un string")
+                        stored_password = stored_password.encode('utf-8')
                         if bcrypt.checkpw(password.encode('utf-8'), stored_password):
                             st.session_state.authenticated = True
                             st.success("Inicio de sesión exitoso")
@@ -103,7 +115,7 @@ if not st.session_state.authenticated:
                             st.error("Contraseña incorrecta")
                     except Exception as e:
                         st.error(f"Error al verificar contraseña: {e}")
-                        st.write(f"Stored password: {stored_password.decode('utf-8') if isinstance(stored_password, bytes) else stored_password}")
+                        st.write(f"Contenido de stored_password: {stored_password.decode('utf-8') if isinstance(stored_password, bytes) else stored_password}")
 else:
     # Menú con botones en la barra lateral
     view = st.sidebar.radio("Navegación", [
