@@ -43,6 +43,22 @@ if not st.session_state.authenticated:
 else:
     st.title("💻 Arrendamiento MarTech Rent")
 
+    # Gestión de usuarios (solo admin)
+    if st.session_state.usuario == "admin":
+        st.sidebar.markdown("## 👥 Gestión de Usuarios")
+        with st.sidebar.expander("➕ Crear nuevo usuario"):
+            nuevo_usuario = st.text_input("Nuevo Usuario")
+            nueva_contraseña = st.text_input("Nueva Contraseña", type="password")
+            if st.button("Crear Usuario"):
+                usuarios_df = pd.read_csv("db/usuarios.csv")
+                if nuevo_usuario in usuarios_df['usuario'].values:
+                    st.warning("⚠️ El usuario ya existe.")
+                else:
+                    nuevo = pd.DataFrame([[nuevo_usuario, nueva_contraseña]], columns=["usuario", "password"])
+                    usuarios_df = pd.concat([usuarios_df, nuevo], ignore_index=True)
+                    usuarios_df.to_csv("db/usuarios.csv", index=False)
+                    st.success("✅ Usuario creado correctamente.")
+
     # Menú con botones en la barra lateral
     view = st.sidebar.radio("Navegación", [
         "📋 Registro de Equipos",
@@ -159,4 +175,3 @@ else:
         st.subheader("Listado de Rentas Realizadas")
         df_rentas = pd.read_csv("db/rentas.csv")
         st.dataframe(df_rentas)
-# El código de la aplicación se colocará aquí en el siguiente paso
