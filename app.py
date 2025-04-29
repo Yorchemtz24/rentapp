@@ -1,13 +1,15 @@
 import streamlit as st
 import pandas as pd
+import sqlite3
 import os
 from datetime import datetime, timedelta
-from filelock import FileLock
 import bcrypt
 import re
 
 # Crear carpeta de base de datos si no existe
 DB_DIR = "db"
+DB_PATH = f"{DB_DIR}/database.db"
+
 if not os.path.exists(DB_DIR):
     try:
         os.makedirs(DB_DIR)
@@ -15,58 +17,81 @@ if not os.path.exists(DB_DIR):
     except Exception as e:
         st.error(f"Error creating directory {DB_DIR}: {e}")
 
-# Archivos CSV
-EQUIPOS_CSV = f"{DB_DIR}/equipos.csv"
-RENTAS_CSV = f"{DB_DIR}/rentas.csv"
-CLIENTES_CSV = f"{DB_DIR}/clientes.csv"
-USUARIOS_CSV = f"{DB_DIR}/usuarios.csv"
+# Inicializar base de datos SQLite
+def initialize_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
 
-# Inicializar archivos CSV si no existen
-def initialize_csv():
-    if not os.path.exists(EQUIPOS_CSV):
-        pd.DataFrame(columns=["id_equipo", "marca", "modelo", "caracteristicas", "estado"]).to_csv(EQUIPOS_CSV, index=False)
-        st.write(f"Created {EQUIPOS_CSV}")
-    if not os.path.exists(RENTAS_CSV):
-        pd.DataFrame(columns=["id_renta", "cliente", "contacto", "id_equipo", "fecha_inicio", "fecha_fin", "precio"]).to_csv(RENTAS_CSV, index=False)
-        st.write(f"Created {RENTAS_CSV}")
-    if not os.path.exists(CLIENTES_CSV):
-        pd.DataFrame(columns=["id_cliente", "nombre", "contacto", "correo"]).to_csv(CLIENTES_CSV, index=False)
-        st.write(f"Created {CLIENTES_CSV}")
-    if not os.path.exists(USUARIOS_CSV):
-        try:
-            hashed_password = bcrypt.hashpw("12345".encode('utf-8'), bcrypt.gensalt())
-            pd.DataFrame([{"usuario": "admin", "password": hashed_password.decode('utf-8')}], dtype=str).to_csv(USUARIOS_CSV, index=False)
-            st.write(f"Created {USUARIOS_CSV} with admin user")
-            # Verificar que el archivo se creó correctamente
-            df_usuarios = pd.read_csv(USUARIOS_CSV, dtype=str)
-            if not df_usuarios.empty and df_usuarios.iloc[0]["password"].startswith('$2b$'):
-                st.write("Password hash in usuarios.csv is valid")
-            else:
-                st.error("Failed to create valid password hash in usuarios.csv")
-        except Exception as e:
-            st.error(f"Error creating {USUARIOS_CSV}: {e}")
+    # Crear tablas si no existen
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS equipos (
+            id_equipo TEXT PRIMARY KEY,
+            marca TEXT,
+            modelo TEXT,
+            caracteristicas TEXT,
+            estado TEXT
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS clientes (
+            id_cliente TEXT PRIMARY KEY,
+            nombre TEXT,
+            contacto TEXT,
+            correo TEXT
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS rentas (
+            id_renta TEXT PRIMARY KEY,
+            cliente TEXT,
+            contacto TEXT,
+            id_equipo TEXT,
+            fecha_inicio TEXT,
+            fecha_fin TEXT,
+            precio REAL
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS usuarios (
+            usuario TEXT PRIMARY KEY,
+            password TEXT
+        )
+    """)
 
-initialize_csv()
+    # Insertar usuario admin si no existe
+    cursor.execute("SELECT COUNT(*) FROM usuarios WHERE usuario = 'admin'")
+    if cursor.fetchone()[0] == 0:
+        hashed_password = bcrypt.hashpw("12345".encode('utf-8'), bcrypt.gensalt())
+        cursor.execute("INSERT INTO usuarios (usuario, password) VALUES (?, ?)", 
+                      ("admin", hashed_password.decode('utf-8')))
+        st.write("Created admin user in usuarios table")
+
+    conn.commit()
+    conn.close()
+    st.write(f"Initialized database: {DB_PATH}")
+
+initialize_db()
 
 # Funciones auxiliares
-def read_csv_safe(file_path):
+def read_table(table_name):
     try:
-        with FileLock(f"{file_path}.lock"):
-            # Forzar tipo string para columnas sensibles
-            if file_path == USUARIOS_CSV:
-                return pd.read_csv(file_path, dtype={"usuario": str, "password": str})
-            return pd.read_csv(file_path)
+        conn = sqlite3.connect(DB_PATH)
+        df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+        conn.close()
+        return df
     except Exception as e:
-        st.error(f"Error al leer {file_path}: {e}")
+        st.error(f"Error al leer {table_name}: {e}")
         return pd.DataFrame()
 
-def write_csv_safe(file_path, df):
+def write_table(table_name, df):
     try:
-        with FileLock(f"{file_path}.lock"):
-            df.to_csv(file_path, index=False)
+        conn = sqlite3.connect(DB_PATH)
+        df.to_sql(table_name, conn, if_exists='replace', index=False)
+        conn.close()
+        st.write(f"Successfully wrote to {table_name}")
         return True
     except Exception as e:
-        st.error(f"Error al escribir en {file_path}: {e}")
+        st.error(f"Error al escribir en {table_name}: {e}")
         return False
 
 def validate_email(email):
@@ -95,7 +120,7 @@ if not st.session_state.authenticated:
             if not username or not password:
                 st.error("Por favor, ingrese usuario y contraseña")
             else:
-                df_usuarios = read_csv_safe(USUARIOS_CSV)
+                df_usuarios = read_table("usuarios")
                 user = df_usuarios[df_usuarios["usuario"] == username]
                 if user.empty:
                     st.error("Usuario no encontrado")
@@ -132,7 +157,7 @@ else:
     if view == "📋 Registro de Equipos":
         st.subheader("Registrar Nuevo Equipo")
         with st.form("form_equipo"):
-            df_equipos = read_csv_safe(EQUIPOS_CSV)
+            df_equipos = read_table("equipos")
             nuevo_id = f"ME{len(df_equipos) + 1:04d}"
             st.text_input("ID del Equipo", value=nuevo_id, disabled=True)
             marca = st.text_input("Marca")
@@ -145,15 +170,19 @@ else:
                 if not marca or not modelo:
                     st.error("Marca y modelo son obligatorios")
                 else:
-                    nuevo = pd.DataFrame([[nuevo_id, marca, modelo, caracteristicas, estado]], columns=df_equipos.columns)
+                    nuevo = pd.DataFrame([[nuevo_id, marca, modelo, caracteristicas, estado]], 
+                                        columns=["id_equipo", "marca", "modelo", "caracteristicas", "estado"])
+                    st.write(f"Attempting to register equipo: {nuevo.to_dict()}")
                     df_equipos = pd.concat([df_equipos, nuevo], ignore_index=True)
-                    if write_csv_safe(EQUIPOS_CSV, df_equipos):
+                    if write_table("equipos", df_equipos):
                         st.success("Equipo registrado correctamente")
+                    else:
+                        st.error("Fallo al registrar el equipo")
 
     elif view == "👤 Registro de Clientes":
         st.subheader("Registrar Nuevo Cliente")
         with st.form("form_cliente"):
-            df_clientes = read_csv_safe(CLIENTES_CSV)
+            df_clientes = read_table("clientes")
             nuevo_id = f"MC{len(df_clientes) + 1:04d}"
             st.text_input("ID del Cliente", value=nuevo_id, disabled=True)
             nombre = st.text_input("Nombre Completo")
@@ -169,17 +198,21 @@ else:
                 elif not validate_phone(contacto):
                     st.error("Teléfono inválido (debe tener 10-15 dígitos)")
                 else:
-                    nuevo = pd.DataFrame([[nuevo_id, nombre, contacto, correo]], columns=df_clientes.columns)
+                    nuevo = pd.DataFrame([[nuevo_id, nombre, contacto, correo]], 
+                                        columns=["id_cliente", "nombre", "contacto", "correo"])
+                    st.write(f"Attempting to register cliente: {nuevo.to_dict()}")
                     df_clientes = pd.concat([df_clientes, nuevo], ignore_index=True)
-                    if write_csv_safe(CLIENTES_CSV, df_clientes):
+                    if write_table("clientes", df_clientes):
                         st.success("Cliente registrado correctamente")
+                    else:
+                        st.error("Fallo al registrar el cliente")
 
     elif view == "📝 Nueva Renta":
         st.subheader("Registrar Nueva Renta")
-        equipos = read_csv_safe(EQUIPOS_CSV)
+        equipos = read_table("equipos")
         disponibles = equipos[equipos.estado == "disponible"]
-        clientes = read_csv_safe(CLIENTES_CSV)
-        df_rentas = read_csv_safe(RENTAS_CSV)
+        clientes = read_table("clientes")
+        df_rentas = read_table("rentas")
 
         if disponibles.empty:
             st.warning("No hay equipos disponibles para rentar.")
@@ -209,16 +242,24 @@ else:
                     elif precio <= 0:
                         st.error("El precio debe ser mayor a 0")
                     else:
-                        nuevo = pd.DataFrame([[nuevo_id_renta, cliente_seleccionado, contacto, equipo, fecha_inicio, fecha_fin, precio]], columns=df_rentas.columns)
+                        nuevo = pd.DataFrame([[nuevo_id_renta, cliente_seleccionado, contacto, equipo, 
+                                             fecha_inicio, fecha_fin, precio]], 
+                                            columns=["id_renta", "cliente", "contacto", "id_equipo", 
+                                                    "fecha_inicio", "fecha_fin", "precio"])
+                        st.write(f"Attempting to register renta: {nuevo.to_dict()}")
                         df_rentas = pd.concat([df_rentas, nuevo], ignore_index=True)
-                        if write_csv_safe(RENTAS_CSV, df_rentas):
+                        if write_table("rentas", df_rentas):
                             equipos.loc[equipos.id_equipo == equipo, "estado"] = "rentado"
-                            if write_csv_safe(EQUIPOS_CSV, equipos):
+                            if write_table("equipos", equipos):
                                 st.success("Renta registrada correctamente")
+                            else:
+                                st.error("Fallo al actualizar el estado del equipo")
+                        else:
+                            st.error("Fallo al registrar la renta")
 
     elif view == "🔍 Seguimiento de Rentas":
         st.subheader("Seguimiento de Rentas")
-        df = read_csv_safe(RENTAS_CSV)
+        df = read_table("rentas")
 
         if df.empty:
             st.info("No hay rentas registradas.")
@@ -238,7 +279,7 @@ else:
 
     elif view == "📦 Inventario":
         st.subheader("Inventario de Equipos")
-        equipos = read_csv_safe(EQUIPOS_CSV)
+        equipos = read_table("equipos")
         if not equipos.empty:
             st.dataframe(equipos.sort_values(by="estado"))
         else:
@@ -246,7 +287,7 @@ else:
 
     elif view == "📁 Listado de Clientes":
         st.subheader("Listado de Clientes Registrados")
-        df_clientes = read_csv_safe(CLIENTES_CSV)
+        df_clientes = read_table("clientes")
         if not df_clientes.empty:
             st.dataframe(df_clientes)
         else:
@@ -254,7 +295,7 @@ else:
 
     elif view == "📁 Listado de Rentas":
         st.subheader("Listado de Rentas Realizadas")
-        df_rentas = read_csv_safe(RENTAS_CSV)
+        df_rentas = read_table("rentas")
         if not df_rentas.empty:
             st.dataframe(df_rentas)
         else:
@@ -262,8 +303,8 @@ else:
 
     elif view == "✅ Finalizar Renta":
         st.subheader("Finalizar Renta")
-        df_rentas = read_csv_safe(RENTAS_CSV)
-        equipos = read_csv_safe(EQUIPOS_CSV)
+        df_rentas = read_table("rentas")
+        equipos = read_table("equipos")
         rentas_activas = df_rentas[df_rentas.id_equipo.isin(equipos[equipos.estado == "rentado"].id_equipo)]
 
         if rentas_activas.empty:
@@ -277,5 +318,8 @@ else:
                     id_equipo = rentas_activas[rentas_activas.id_renta == renta_seleccionada].id_equipo.iloc[0]
                     equipos.loc[equipos.id_equipo == id_equipo, "estado"] = "disponible"
                     df_rentas = df_rentas[df_rentas.id_renta != renta_seleccionada]
-                    if write_csv_safe(EQUIPOS_CSV, equipos) and write_csv_safe(RENTAS_CSV, df_rentas):
+                    st.write(f"Attempting to finalize renta {renta_seleccionada}")
+                    if write_table("equipos", equipos) and write_table("rentas", df_rentas):
                         st.success(f"Renta {renta_seleccionada} finalizada. Equipo disponible nuevamente.")
+                    else:
+                        st.error("Fallo al finalizar la renta")
