@@ -17,6 +17,9 @@ if not os.path.exists("db/rentas.csv"):
 if not os.path.exists("db/clientes.csv"):
     pd.DataFrame(columns=["id_cliente", "nombre", "contacto", "correo"]).to_csv("db/clientes.csv", index=False)
 
+if not os.path.exists("db/usuarios.csv"):
+    pd.DataFrame([{"usuario": "admin", "password": "12345"}]).to_csv("db/usuarios.csv", index=False)
+
 st.set_page_config(page_title="Arrendamiento MarTech Rent", layout="wide")
 
 # Autenticación básica
