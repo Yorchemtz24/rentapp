@@ -314,43 +314,54 @@ else:
             st.warning("⚠️ No hay clientes registrados.")
         else:
             with st.form("form_renta"):
+                # Generar un ID único para la renta
                 nuevo_id_renta = f"RE-{len(df_rentas) + 1:04d}"
                 st.text_input("ID de Renta", value=nuevo_id_renta, disabled=True)
-                cliente_seleccionado = st.selectbox("Cliente", clientes.nombre.tolist())
 
+                # Seleccionar cliente
+                cliente_seleccionado = st.selectbox("Cliente", clientes.nombre.tolist())
                 cliente_info = clientes[clientes.nombre == cliente_seleccionado].iloc[0]
                 contacto = cliente_info.contacto
                 correo = cliente_info.correo
                 st.markdown(f"**📞 Contacto:** {contacto}")
                 st.markdown(f"**✉️ Correo:** {correo}")
 
-                # Selección de múltiples equipos
+                # Selección de múltiples equipos usando st.multiselect
                 equipos_seleccionados = st.multiselect("Seleccionar Equipos", disponibles.id_equipo.tolist())
 
                 # Diccionario para almacenar precios de los equipos seleccionados
                 precios_equipos = {}
                 if equipos_seleccionados:
                     st.subheader("Precios de los Equipos")
+                    # Para cada equipo seleccionado, mostrar un campo para ingresar su precio
                     for equipo in equipos_seleccionados:
-                        precio = st.number_input(f"Precio de Renta para {equipo}", min_value=0.0, step=0.01, key=f"precio_{equipo}")
+                        precio = st.number_input(
+                            f"Precio de Renta para {equipo}", 
+                            min_value=0.0, 
+                            step=0.01, 
+                            key=f"precio_{equipo}"
+                        )
                         precios_equipos[equipo] = precio
 
-                # Calcular subtotal
+                # Calcular el subtotal sumando los precios de los equipos
                 subtotal = sum(precios_equipos.values()) if precios_equipos else 0.0
                 st.markdown(f"**Subtotal (sin IVA):** ${subtotal:.2f}")
 
-                # Checkbox para incluir IVA del 16%
+                # Checkbox para incluir IVA del 16% (opcional)
                 incluir_iva = st.checkbox("Incluir IVA del 16% (México)")
                 iva = subtotal * 0.16 if incluir_iva else 0.0
                 total = subtotal + iva
 
-                # Mostrar desglose
+                # Mostrar desglose del costo
                 if incluir_iva:
                     st.markdown(f"**IVA (16%):** ${iva:.2f}")
                 st.markdown(f"**Total:** ${total:.2f}")
 
+                # Campos para fechas de inicio y fin
                 fecha_inicio = st.date_input("Fecha de Inicio", value=datetime.now())
                 fecha_fin = st.date_input("Fecha de Fin", value=datetime.now() + timedelta(days=7))
+
+                # Botón para registrar la renta
                 submitted = st.form_submit_button("Registrar Renta")
 
                 if submitted:
@@ -361,12 +372,15 @@ else:
                     elif subtotal <= 0:
                         st.error("❌ El subtotal debe ser mayor a 0")
                     else:
-                        # Almacenar la lista de equipos como JSON
+                        # Convertir la lista de equipos a formato JSON para almacenarla
                         equipos_json = json.dumps(equipos_seleccionados)
-                        nuevo = pd.DataFrame([[nuevo_id_renta, cliente_seleccionado, contacto, equipos_json, 
-                                             fecha_inicio, fecha_fin, subtotal, total]], 
-                                            columns=["id_renta", "cliente", "contacto", "equipos", 
-                                                    "fecha_inicio", "fecha_fin", "subtotal", "precio"])
+                        # Crear nueva entrada para la tabla rentas
+                        nuevo = pd.DataFrame(
+                            [[nuevo_id_renta, cliente_seleccionado, contacto, equipos_json, 
+                              fecha_inicio, fecha_fin, subtotal, total]], 
+                            columns=["id_renta", "cliente", "contacto", "equipos", 
+                                     "fecha_inicio", "fecha_fin", "subtotal", "precio"]
+                        )
                         st.write(f"Attempting to register renta: {nuevo.to_dict()}")
                         df_rentas = pd.concat([df_rentas, nuevo], ignore_index=True)
                         if write_table("rentas", df_rentas):
