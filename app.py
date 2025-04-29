@@ -22,55 +22,6 @@ if not os.path.exists("db/usuarios.csv"):
 
 st.set_page_config(page_title="Arrendamiento MarTech Rent", layout="wide")
 
-# Inicio de sesión
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-if "usuario" not in st.session_state:
-    st.session_state.usuario = None
-
-def login():
-    st.title("🔐 Iniciar Sesión")
-    usuario_input = st.text_input("Usuario")
-    password_input = st.text_input("Contraseña", type="password")
-    if st.button("Ingresar"):
-        usuarios_df = pd.read_csv("db/usuarios.csv")
-        user_match = usuarios_df[(usuarios_df.usuario == usuario_input) & (usuarios_df.password == password_input)]
-        if not user_match.empty:
-            st.session_state.authenticated = True
-            st.session_state.usuario = usuario_input
-            st.success("Inicio de sesión exitoso")
-            st.experimental_rerun()
-        else:
-            st.error("Credenciales inválidas")
-
-if not st.session_state.authenticated:
-    login()
-    st.stop()
-
-# Vista principal si el usuario está autenticado
-st.title("💻 Arrendamiento MarTech Rent")
-st.sidebar.markdown(f"👤 Usuario actual: `{st.session_state.usuario}`")
-
-# Gestión de usuarios (solo admin)
-if st.session_state.usuario == "admin":
-    st.sidebar.markdown("## 👥 Gestión de Usuarios")
-    with st.sidebar.expander("➕ Crear nuevo usuario"):
-        nuevo_usuario = st.text_input("Nuevo Usuario")
-        nueva_contraseña = st.text_input("Nueva Contraseña", type="password")
-        if st.button("Crear Usuario"):
-            usuarios_df = pd.read_csv("db/usuarios.csv")
-            if nuevo_usuario in usuarios_df['usuario'].values:
-                st.warning("⚠️ El usuario ya existe.")
-            else:
-                nuevo = pd.DataFrame([[nuevo_usuario, nueva_contraseña]], columns=["usuario", "password"])
-                usuarios_df = pd.concat([usuarios_df, nuevo], ignore_index=True)
-                usuarios_df.to_csv("db/usuarios.csv", index=False)
-                st.success("✅ Usuario creado correctamente.")
-
-# Continúa con el resto de la app desde aquí (módulo de navegación, registro de equipos, clientes, rentas, etc.)
-# Ya está en tu código actual, solo colócalo debajo de este bloque
-
-
     # Menú con botones en la barra lateral
     view = st.sidebar.radio("Navegación", [
         "📋 Registro de Equipos",
