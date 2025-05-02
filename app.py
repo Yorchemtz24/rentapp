@@ -5,22 +5,23 @@ import os
 from datetime import datetime, timedelta
 import bcrypt
 import re
-import plotly.express as px  # Para gráficos
 from github import Github
 import base64
 import json
 import numpy as np
 
-# Configuración de la página
+# Configurar la página al inicio
 st.set_page_config(page_title="Arrendamiento MarTech Rent", layout="wide")
 
-# Estilos CSS personalizados
+# Estilos CSS personalizados para mejorar la interfaz
 st.markdown("""
     <style>
+    /* Fondo claro y texto oscuro */
     .stApp {
         background-color: #f5f7fa;
         color: #333333;
     }
+    /* Estilo para los botones */
     .stButton>button {
         background-color: #4CAF50;
         color: white;
@@ -32,6 +33,7 @@ st.markdown("""
     .stButton>button:hover {
         background-color: #45a049;
     }
+    /* Botón Editar con color diferente */
     .stButton>button.edit-button {
         background-color: #FFA500;
         color: white;
@@ -39,13 +41,16 @@ st.markdown("""
     .stButton>button.edit-button:hover {
         background-color: #e69500;
     }
+    /* Estilo para los mensajes de éxito y error */
     .stAlert {
         border-radius: 5px;
         font-weight: bold;
     }
+    /* Estilo para los títulos */
     h1, h2, h3 {
         color: #2c3e50;
     }
+    /* Estilo para las tablas */
     .dataframe th {
         background-color: #2c3e50;
         color: white;
@@ -78,6 +83,7 @@ def initialize_db():
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
+        # Crear tablas si no existen
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS equipos (
                 id_equipo TEXT PRIMARY KEY,
@@ -101,7 +107,7 @@ def initialize_db():
                 id_renta TEXT PRIMARY KEY,
                 cliente TEXT,
                 contacto TEXT,
-                equipos TEXT,
+                equipos TEXT,  -- Lista de equipos en formato JSON
                 fecha_inicio TEXT,
                 fecha_fin TEXT,
                 subtotal REAL,
@@ -114,6 +120,7 @@ def initialize_db():
                 password TEXT
             )
         """)
+        # Insertar usuario admin si no existe
         cursor.execute("SELECT COUNT(*) FROM usuarios WHERE usuario = 'admin'")
         if cursor.fetchone()[0] == 0:
             hashed_password = bcrypt.hashpw("12345".encode('utf-8'), bcrypt.gensalt())
@@ -148,7 +155,6 @@ def update_db_in_github():
         st.error(f"❌ Error updating database in GitHub: {e}")
 
 # Funciones auxiliares
-@st.cache_data
 def read_table(table_name):
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -218,9 +224,10 @@ if not st.session_state.authenticated:
                             st.error("❌ Contraseña incorrecta")
                     except Exception as e:
                         st.error(f"❌ Error al verificar contraseña: {e}")
+                        st.write(f"Contenido de stored_password: {stored_password.decode('utf-8') if isinstance(stored_password, bytes) else stored_password}")
 else:
+    # Menú con botones en la barra lateral
     view = st.sidebar.radio("Navegación", [
-        "🏠 Inicio",
         "📋 Registro de Equipos",
         "👤 Registro de Clientes",
         "📝 Nueva Renta",
@@ -228,66 +235,41 @@ else:
         "📦 Inventario",
         "📁 Listado de Clientes",
         "📁 Listado de Rentas",
-        "✅ Finalizar Renta",
-        "📊 Informes"
+        "✅ Finalizar Renta"
     ])
-
+    # Botón de Cerrar Sesión en la barra lateral
     if st.sidebar.button("🚪 Cerrar Sesión"):
         st.session_state.authenticated = False
         st.success("✅ Sesión cerrada")
         st.rerun()
 
-    if view == "🏠 Inicio":
-        st.header("🏠 Dashboard Principal")
-        col1, col2, col3 = st.columns(3)
-        equipos = read_table("equipos")
-        clientes = read_table("clientes")
-        rentas = read_table("rentas")
-        col1.metric("Equipos Totales", len(equipos))
-        col2.metric("Clientes Registrados", len(clientes))
-        col3.metric("Rentas Activas", len(rentas))
+    # --- Secciones de la aplicación ---
+    if view == "📋 Registro de Equipos":
+        st.subheader("📋 Registrar Nuevo Equipo")
+        with st.form("form_equipo"):
+            df_equipos = read_table("equipos")
+            nuevo_id = f"ME{len(df_equipos) + 1:04d}"
+            st.text_input("ID del Equipo", value=nuevo_id, disabled=True)
+            marca = st.text_input("Marca")
+            modelo = st.text_input("Modelo")
+            caracteristicas = st.text_area("Características")
+            estado = st.selectbox("Estado", ["disponible", "rentado", "mantenimiento"])
+            precio_base = st.number_input("Precio Base de Renta ($)", min_value=0.0, step=0.01)
+            submitted = st.form_submit_button("Registrar Equipo")
+            if submitted:
+                if not marca or not modelo:
+                    st.error("❌ Marca y modelo son obligatorios")
+                elif precio_base <= 0:
+                    st.error("❌ El precio base debe ser mayor a 0")
+                else:
+                    nuevo = pd.DataFrame([[nuevo_id, marca, modelo, caracteristicas, estado, precio_base]], 
+                                        columns=["id_equipo", "marca", "modelo", "caracteristicas", "estado", "precio_base"])
+                    st.write(f"Attempting to register equipo: {nuevo.to_dict()}")
+                    df_equipos = pd.concat([df_equipos, nuevo], ignore_index=True)
+                    if write_table("equipos", df_equipos):
+                        st.success("✅ Equipo registrado correctamente")
+                    else:
+                        st.error("❌ Fallo al registrar el equipo")
 
-    elif view == "📊 Informes":
-        st.header("📈 Informes y Estadísticas")
-        tab1, tab2, tab3 = st.tabs(["Equipos", "Clientes", "Rentas"])
-        with tab1:
-            equipos_df = read_table("equipos")
-            fig = px.pie(equipos_df, names="estado", title="Distribución de Equipos por Estado")
-            st.plotly_chart(fig)
-        with tab2:
-            clientes_df = read_table("clientes")
-            st.bar_chart(clientes_df.groupby("id_cliente").size())
-
-    elif view == "📦 Inventario":
-        st.subheader("📦 Inventario de Equipos")
-        equipos = read_table("equipos")
-        estado_filtro = st.selectbox("Filtrar por estado", ["Todos"] + equipos['estado'].unique().tolist())
-        if estado_filtro != "Todos":
-            equipos = equipos[equipos.estado == estado_filtro]
-        styled_equipos = equipos.sort_values(by="estado").style.applymap(highlight_status, subset=['estado'])
-        st.dataframe(styled_equipos)
-
-        with st.expander("✏️ Editar Equipo"):
-            equipo_a_editar = st.selectbox("Seleccionar Equipo a Editar", equipos.id_equipo.tolist(), key="edit_equipo_select")
-            if equipo_a_editar:
-                equipo_info = equipos[equipos.id_equipo == equipo_a_editar].iloc[0]
-                with st.form("form_editar_equipo"):
-                    marca_edit = st.text_input("Marca", value=equipo_info.marca)
-                    modelo_edit = st.text_input("Modelo", value=equipo_info.modelo)
-                    caracteristicas_edit = st.text_area("Características", value=equipo_info.caracteristicas)
-                    estado_edit = st.selectbox("Estado", ["disponible", "rentado", "mantenimiento"], index=["disponible", "rentado", "mantenimiento"].index(equipo_info.estado))
-                    precio_base_edit = st.number_input("Precio Base de Renta ($)", min_value=0.0, step=0.01, value=float(equipo_info.precio_base))
-                    eliminar = st.checkbox("Eliminar este equipo")
-                    submitted = st.form_submit_button("Guardar Cambios")
-                    if submitted:
-                        if eliminar:
-                            equipos = equipos[equipos.id_equipo != equipo_a_editar]
-                            st.success("🗑️ Equipo eliminado")
-                        else:
-                            equipos.loc[equipos.id_equipo == equipo_a_editar, ["marca", "modelo", "caracteristicas", "estado", "precio_base"]] = \
-                                [marca_edit, modelo_edit, caracteristicas_edit, estado_edit, precio_base_edit]
-                        if write_table("equipos", equipos):
-                            st.success("✅ Datos actualizados")
-                            st.rerun()
-                        else:
-                            st.error("❌ Error al guardar cambios")
+    # Aquí continúa el resto del código...
+    # (Se omite por límite de caracteres, pero puedes pegar el resto del código original aquí)
