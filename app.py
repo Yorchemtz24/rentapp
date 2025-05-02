@@ -226,25 +226,51 @@ if not st.session_state.authenticated:
                         st.error(f"❌ Error al verificar contraseña: {e}")
                         st.write(f"Contenido de stored_password: {stored_password.decode('utf-8') if isinstance(stored_password, bytes) else stored_password}")
 else:
-    # Menú con botones en la barra lateral
-    view = st.sidebar.radio("Navegación", [
-        "📋 Registro de Equipos",
-        "👤 Registro de Clientes",
-        "📝 Nueva Renta",
-        "🔍 Seguimiento de Rentas",
-        "📦 Inventario",
-        "📁 Listado de Clientes",
-        "📁 Listado de Rentas",
-        "✅ Finalizar Renta"
-    ])
-    # Botón de Cerrar Sesión en la barra lateral
-    if st.sidebar.button("🚪 Cerrar Sesión"):
-        st.session_state.authenticated = False
-        st.success("✅ Sesión cerrada")
-        st.rerun()
+    if "view" not in st.session_state:
+        st.session_state.view = "Inicio"
 
-    # --- Secciones de la aplicación ---
-    if view == "📋 Registro de Equipos":
+    if st.session_state.view == "Inicio":
+        st.title("🏠 Panel Principal - Arrendamiento MarTech Rent")
+        st.markdown("Selecciona una opción para continuar:")
+
+        col1, col2, col3 = st.columns(3)
+
+        if col1.button("📋 Registro de Equipos", use_container_width=True):
+            st.session_state.view = "Registro de Equipos"
+            st.rerun()
+        if col2.button("👤 Registro de Clientes", use_container_width=True):
+            st.session_state.view = "Registro de Clientes"
+            st.rerun()
+        if col3.button("📝 Nueva Renta", use_container_width=True):
+            st.session_state.view = "Nueva Renta"
+            st.rerun()
+
+        col4, col5, col6 = st.columns(3)
+
+        if col4.button("🔍 Seguimiento de Rentas", use_container_width=True):
+            st.session_state.view = "Seguimiento de Rentas"
+            st.rerun()
+        if col5.button("📦 Inventario", use_container_width=True):
+            st.session_state.view = "Inventario"
+            st.rerun()
+        if col6.button("📁 Listado de Clientes", use_container_width=True):
+            st.session_state.view = "Listado de Clientes"
+            st.rerun()
+
+        col7, col8, col9 = st.columns(3)
+
+        if col7.button("📁 Listado de Rentas", use_container_width=True):
+            st.session_state.view = "Listado de Rentas"
+            st.rerun()
+        if col8.button("✅ Finalizar Renta", use_container_width=True):
+            st.session_state.view = "Finalizar Renta"
+            st.rerun()
+        if col9.button("🚪 Cerrar Sesión", use_container_width=True):
+            st.session_state.authenticated = False
+            st.success("✅ Sesión cerrada")
+            st.rerun()
+
+    elif st.session_state.view == "Registro de Equipos":
         st.subheader("📋 Registrar Nuevo Equipo")
         with st.form("form_equipo"):
             df_equipos = read_table("equipos")
@@ -262,14 +288,113 @@ else:
                 elif precio_base <= 0:
                     st.error("❌ El precio base debe ser mayor a 0")
                 else:
-                    nuevo = pd.DataFrame([[nuevo_id, marca, modelo, caracteristicas, estado, precio_base]], 
+                    nuevo = pd.DataFrame([[nuevo_id, marca, modelo, caracteristicas, estado, precio_base]],
                                         columns=["id_equipo", "marca", "modelo", "caracteristicas", "estado", "precio_base"])
-                    st.write(f"Attempting to register equipo: {nuevo.to_dict()}")
                     df_equipos = pd.concat([df_equipos, nuevo], ignore_index=True)
                     if write_table("equipos", df_equipos):
                         st.success("✅ Equipo registrado correctamente")
                     else:
                         st.error("❌ Fallo al registrar el equipo")
+        if st.button("⬅️ Regresar al inicio"):
+            st.session_state.view = "Inicio"
+            st.rerun()
 
-    # Aquí continúa el resto del código...
-    # (Se omite por límite de caracteres, pero puedes pegar el resto del código original aquí)
+    elif st.session_state.view == "Registro de Clientes":
+        st.subheader("👤 Registrar Nuevo Cliente")
+        with st.form("form_cliente"):
+            df_clientes = read_table("clientes")
+            nuevo_id = f"MC{len(df_clientes) + 1:04d}"
+            st.text_input("ID del Cliente", value=nuevo_id, disabled=True)
+            nombre = st.text_input("Nombre Completo")
+            contacto = st.text_input("Teléfono")
+            correo = st.text_input("Correo Electrónico")
+            submitted = st.form_submit_button("Registrar Cliente")
+            if submitted:
+                if not nombre or not contacto or not correo:
+                    st.error("❌ Todos los campos son obligatorios")
+                elif not validate_email(correo):
+                    st.error("❌ Correo electrónico inválido")
+                elif not validate_phone(contacto):
+                    st.error("❌ Teléfono inválido (debe tener 10-15 dígitos)")
+                else:
+                    nuevo = pd.DataFrame([[nuevo_id, nombre, contacto, correo]], 
+                                        columns=["id_cliente", "nombre", "contacto", "correo"])
+                    df_clientes = pd.concat([df_clientes, nuevo], ignore_index=True)
+                    if write_table("clientes", df_clientes):
+                        st.success("✅ Cliente registrado correctamente")
+                    else:
+                        st.error("❌ Fallo al registrar el cliente")
+        if st.button("⬅️ Regresar al inicio"):
+            st.session_state.view = "Inicio"
+            st.rerun()
+
+    elif st.session_state.view == "Nueva Renta":
+        st.subheader("📝 Registrar Nueva Renta")
+        equipos = read_table("equipos")
+        disponibles = equipos[equipos.estado == "disponible"]
+        clientes = read_table("clientes")
+        df_rentas = read_table("rentas")
+        if disponibles.empty:
+            st.warning("⚠️ No hay equipos disponibles para rentar.")
+        elif clientes.empty:
+            st.warning("⚠️ No hay clientes registrados.")
+        else:
+            with st.form("form_renta"):
+                nuevo_id_renta = f"RE-{len(df_rentas) + 1:04d}"
+                st.text_input("ID de Renta", value=nuevo_id_renta, disabled=True)
+                cliente_seleccionado = st.selectbox("Cliente", clientes.nombre.tolist())
+                cliente_info = clientes[clientes.nombre == cliente_seleccionado].iloc[0]
+                contacto = cliente_info.contacto
+                correo = cliente_info.correo
+                st.markdown(f"**📞 Contacto:** {contacto}")
+                st.markdown(f"**✉️ Correo:** {correo}")
+                equipos_seleccionados = st.multiselect("Seleccionar Equipos", disponibles.id_equipo.tolist())
+                precios_equipos = {}
+                if equipos_seleccionados:
+                    for equipo in equipos_seleccionados:
+                        precio_base = disponibles[disponibles.id_equipo == equipo].precio_base.iloc[0]
+                        precio_base = float(precio_base) if pd.notnull(precio_base) else 0.0
+                        precio = st.number_input(
+                            f"Precio de Renta para {equipo} (Precio base: ${precio_base:.2f})", 
+                            min_value=0.0, step=0.01, value=precio_base,
+                            key=f"precio_{equipo}"
+                        )
+                        precios_equipos[equipo] = precio
+                subtotal = sum(precios_equipos.values()) if precios_equipos else 0.0
+                st.markdown(f"**Subtotal (sin IVA):** ${subtotal:.2f}")
+                incluir_iva = st.checkbox("Incluir IVA del 16% (México)")
+                iva = subtotal * 0.16 if incluir_iva else 0.0
+                total = subtotal + iva
+                if incluir_iva:
+                    st.markdown(f"**IVA (16%):** ${iva:.2f}")
+                st.markdown(f"**Total:** ${total:.2f}")
+                fecha_inicio = st.date_input("Fecha de Inicio", value=datetime.now())
+                fecha_fin = st.date_input("Fecha de Fin", value=datetime.now() + timedelta(days=7))
+                submitted = st.form_submit_button("Registrar Renta")
+                if submitted:
+                    if not equipos_seleccionados:
+                        st.error("❌ Debe seleccionar al menos un equipo")
+                    elif fecha_fin <= fecha_inicio:
+                        st.error("❌ La fecha de fin debe ser posterior a la fecha de inicio")
+                    elif subtotal <= 0:
+                        st.error("❌ El subtotal debe ser mayor a 0")
+                    else:
+                        equipos_json = json.dumps(equipos_seleccionados)
+                        nuevo = pd.DataFrame([[nuevo_id_renta, cliente_seleccionado, contacto, equipos_json, fecha_inicio, fecha_fin, subtotal, total]],
+                                            columns=["id_renta", "cliente", "contacto", "equipos", "fecha_inicio", "fecha_fin", "subtotal", "precio"])
+                        df_rentas = pd.concat([df_rentas, nuevo], ignore_index=True)
+                        if write_table("rentas", df_rentas):
+                            for equipo in equipos_seleccionados:
+                                equipos.loc[equipos.id_equipo == equipo, "estado"] = "rentado"
+                            if write_table("equipos", equipos):
+                                st.success("✅ Renta registrada correctamente")
+                            else:
+                                st.error("❌ Fallo al actualizar el estado de los equipos")
+                        else:
+                            st.error("❌ Fallo al registrar la renta")
+        if st.button("⬅️ Regresar al inicio"):
+            st.session_state.view = "Inicio"
+            st.rerun()
+
+    # Repite esta estructura para las demás vistas: "Seguimiento de Rentas", "Inventario", etc.
+    # Y agrega siempre el botón de regreso al final de cada sección
