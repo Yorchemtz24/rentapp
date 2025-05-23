@@ -467,8 +467,8 @@ else:
         if st.button("⬅️ Regresar al inicio"):
             st.session_state.view = "Inicio"
             st.rerun()
-
-         elif st.session_state.view == "Finalizar Renta":
+            
+    elif st.session_state.view == "Finalizar Renta":
         st.subheader("✅ Finalizar Renta")
         df_rentas = read_table("rentas")
         equipos = read_table("equipos")
@@ -509,3 +509,5 @@ else:
         if st.button("⬅️ Regresar al inicio"):
             st.session_state.view = "Inicio"
             st.rerun()
+
+     
