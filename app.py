@@ -468,14 +468,16 @@ else:
             st.session_state.view = "Inicio"
             st.rerun()
 
-       elif st.session_state.view == "Finalizar Renta":
+         elif st.session_state.view == "Finalizar Renta":
         st.subheader("✅ Finalizar Renta")
         df_rentas = read_table("rentas")
         equipos = read_table("equipos")
+        
         if df_rentas.empty:
             st.info("ℹ️ No hay rentas activas.")
         else:
             df_rentas["equipos"] = df_rentas["equipos"].apply(lambda x: json.loads(x) if isinstance(x, str) and x else [])
+            
             rentas_activas = df_rentas[df_rentas.equipos.apply(
                 lambda eqs: any(
                     equipos[equipos.id_equipo == eq].estado.iloc[0] == "rentado" 
@@ -483,22 +485,27 @@ else:
                     if not equipos[equipos.id_equipo == eq].empty
                 )
             )]
+            
             if rentas_activas.empty:
                 st.info("ℹ️ No hay rentas activas para finalizar.")
             else:
                 with st.form("form_finalizar_renta"):
                     renta_seleccionada = st.selectbox("Renta", rentas_activas.id_renta.tolist())
                     submitted = st.form_submit_button("Finalizar Renta")
+                    
                     if submitted:
                         equipos_renta = rentas_activas[rentas_activas.id_renta == renta_seleccionada].equipos.iloc[0]
                         for equipo in equipos_renta:
                             equipos.loc[equipos.id_equipo == equipo, "estado"] = "disponible"
+                        
                         df_rentas = df_rentas[df_rentas.id_renta != renta_seleccionada]
                         df_rentas["equipos"] = df_rentas["equipos"].apply(json.dumps)
+                        
                         if write_table("equipos", equipos) and write_table("rentas", df_rentas):
                             st.success(f"✅ Renta {renta_seleccionada} finalizada")
                         else:
                             st.error("❌ Error al finalizar la renta")
+        
         if st.button("⬅️ Regresar al inicio"):
             st.session_state.view = "Inicio"
             st.rerun()
