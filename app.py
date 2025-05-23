@@ -7,6 +7,7 @@ import bcrypt
 import re
 from github import Github
 import json
+import tempfile
 
 # Configuración de la página
 st.set_page_config(page_title="Arrendamiento MarTech Rent", layout="wide")
@@ -60,98 +61,139 @@ REPO_NAME = "Yorchemtz24/rentapp"
 if not GITHUB_TOKEN:
     st.error("GitHub token not configured. Please set GITHUB_TOKEN in Streamlit secrets.")
 
-# Crear carpeta de base de datos si no existe
-DB_DIR = "db"
-DB_PATH = f"{DB_DIR}/database.db"
-if not os.path.exists(DB_DIR):
-    try:
-        os.makedirs(DB_DIR)
-    except Exception as e:
-        st.error(f"Error creating directory {DB_DIR}: {e}")
+# Configuración de base de datos para Streamlit Cloud
+@st.cache_resource
+def get_db_path():
+    """Crear un archivo temporal para la base de datos que persista durante la sesión"""
+    if 'db_path' not in st.session_state:
+        # Usar un archivo temporal en el directorio temporal del sistema
+        temp_dir = tempfile.gettempdir()
+        st.session_state.db_path = os.path.join(temp_dir, "rentapp_database.db")
+    return st.session_state.db_path
+
+DB_PATH = get_db_path()
 
 # Inicializar base de datos SQLite
+@st.cache_resource
 def initialize_db():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS equipos (
-            id_equipo TEXT PRIMARY KEY,
-            marca TEXT,
-            modelo TEXT,
-            caracteristicas TEXT,
-            estado TEXT,
-            precio_base REAL
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS clientes (
-            id_cliente TEXT PRIMARY KEY,
-            nombre TEXT,
-            contacto TEXT,
-            correo TEXT
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS rentas (
-            id_renta TEXT PRIMARY KEY,
-            cliente TEXT,
-            contacto TEXT,
-            equipos TEXT,
-            fecha_inicio TEXT,
-            fecha_fin TEXT,
-            subtotal REAL,
-            precio REAL
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS usuarios (
-            usuario TEXT PRIMARY KEY,
-            password TEXT
-        )
-    """)
-    cursor.execute("SELECT COUNT(*) FROM usuarios WHERE usuario = 'admin'")
-    if cursor.fetchone()[0] == 0:
-        hashed_password = bcrypt.hashpw("12345".encode('utf-8'), bcrypt.gensalt())
-        cursor.execute("INSERT INTO usuarios (usuario, password) VALUES (?, ?)",
-                      ("admin", hashed_password.decode('utf-8')))
-    conn.commit()
-    conn.close()
-
-initialize_db()
-
-# Función para sincronizar database.db con GitHub
-def update_db_in_github():
-    if not GITHUB_TOKEN:
-        st.error("Cannot update GitHub: GITHUB_TOKEN is not set.")
-        return
+    """Inicializar la base de datos con manejo de errores"""
     try:
-        from github import Github
-        g = Github(GITHUB_TOKEN)
-        repo = g.get_repo(REPO_NAME)
-        with open(DB_PATH, "rb") as file:
-            content = file.read()
-        try:
-            contents = repo.get_contents("db/database.db")
-            repo.update_file(contents.path, "Update database.db", content, contents.sha)
-        except:
-            repo.create_file("db/database.db", "Create database.db", content)
-        st.write("✅ Updated database.db in GitHub")
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Crear tablas
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS equipos (
+                id_equipo TEXT PRIMARY KEY,
+                marca TEXT,
+                modelo TEXT,
+                caracteristicas TEXT,
+                estado TEXT,
+                precio_base REAL
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS clientes (
+                id_cliente TEXT PRIMARY KEY,
+                nombre TEXT,
+                contacto TEXT,
+                correo TEXT
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS rentas (
+                id_renta TEXT PRIMARY KEY,
+                cliente TEXT,
+                contacto TEXT,
+                equipos TEXT,
+                fecha_inicio TEXT,
+                fecha_fin TEXT,
+                subtotal REAL,
+                precio REAL
+            )
+        """)
+        
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS usuarios (
+                usuario TEXT PRIMARY KEY,
+                password TEXT
+            )
+        """)
+        
+        # Crear usuario admin por defecto
+        cursor.execute("SELECT COUNT(*) FROM usuarios WHERE usuario = 'admin'")
+        if cursor.fetchone()[0] == 0:
+            hashed_password = bcrypt.hashpw("12345".encode('utf-8'), bcrypt.gensalt())
+            cursor.execute("INSERT INTO usuarios (usuario, password) VALUES (?, ?)",
+                          ("admin", hashed_password.decode('utf-8')))
+        
+        conn.commit()
+        conn.close()
+        return True
+        
     except Exception as e:
-        st.error(f"❌ Error updating database in GitHub: {e}")
+        st.error(f"Error inicializando base de datos: {e}")
+        return False
 
-# Funciones auxiliares
+# Inicializar base de datos
+if initialize_db():
+    st.success("✅ Base de datos inicializada correctamente", icon="✅")
+else:
+    st.error("❌ Error al inicializar la base de datos")
+
+# Función para sincronizar database.db con GitHub (simplificada)
+def update_db_in_github():
+    """Función simplificada para sincronización con GitHub"""
+    if not GITHUB_TOKEN:
+        st.warning("⚠️ GitHub token no configurado. Los cambios solo se guardan localmente.")
+        return True
+    
+    try:
+        # Solo intentar actualizar si el archivo existe y es accesible
+        if os.path.exists(DB_PATH):
+            g = Github(GITHUB_TOKEN)
+            repo = g.get_repo(REPO_NAME)
+            
+            with open(DB_PATH, "rb") as file:
+                content = file.read()
+            
+            try:
+                contents = repo.get_contents("db/database.db")
+                repo.update_file(contents.path, "Update database.db", content, contents.sha)
+            except:
+                repo.create_file("db/database.db", "Create database.db", content)
+            
+            st.info("✅ Base de datos sincronizada con GitHub")
+            return True
+    except Exception as e:
+        st.warning(f"⚠️ No se pudo sincronizar con GitHub: {e}")
+        return True  # Continuar funcionando sin sincronización
+
+# Funciones auxiliares con manejo de errores mejorado
 def read_table(table_name):
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
-    conn.close()
-    return df
+    """Leer tabla de la base de datos con manejo de errores"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+        conn.close()
+        return df
+    except Exception as e:
+        st.error(f"Error leyendo tabla {table_name}: {e}")
+        return pd.DataFrame()
 
 def write_table(table_name, df):
-    conn = sqlite3.connect(DB_PATH)
-    df.to_sql(table_name, conn, if_exists='replace', index=False)
-    conn.close()
-    update_db_in_github()
-    return True
+    """Escribir tabla en la base de datos con manejo de errores"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        df.to_sql(table_name, conn, if_exists='replace', index=False)
+        conn.close()
+        update_db_in_github()
+        return True
+    except Exception as e:
+        st.error(f"Error escribiendo tabla {table_name}: {e}")
+        return False
 
 def validate_email(email):
     pattern = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
@@ -180,22 +222,27 @@ if not st.session_state.authenticated:
                 st.error("Por favor, ingrese usuario y contraseña")
             else:
                 df_usuarios = read_table("usuarios")
-                user = df_usuarios[df_usuarios["usuario"] == username]
-                if user.empty:
-                    st.error("Usuario no encontrado")
+                if df_usuarios.empty:
+                    st.error("Error al acceder a la base de datos de usuarios")
                 else:
-                    stored_password = user.iloc[0]["password"]
-                    try:
-                        stored_password = stored_password.encode('utf-8')
-                        if bcrypt.checkpw(password.encode('utf-8'), stored_password):
-                            st.session_state.authenticated = True
-                            st.success("✅ Inicio de sesión exitoso")
-                            st.rerun()
-                        else:
-                            st.error("❌ Contraseña incorrecta")
-                    except Exception as e:
-                        st.error(f"❌ Error al verificar contraseña: {e}")
+                    user = df_usuarios[df_usuarios["usuario"] == username]
+                    if user.empty:
+                        st.error("Usuario no encontrado")
+                    else:
+                        stored_password = user.iloc[0]["password"]
+                        try:
+                            if isinstance(stored_password, str):
+                                stored_password = stored_password.encode('utf-8')
+                            if bcrypt.checkpw(password.encode('utf-8'), stored_password):
+                                st.session_state.authenticated = True
+                                st.success("✅ Inicio de sesión exitoso")
+                                st.rerun()
+                            else:
+                                st.error("❌ Contraseña incorrecta")
+                        except Exception as e:
+                            st.error(f"❌ Error al verificar contraseña: {e}")
 else:
+    # El resto del código permanece igual...
     if "view" not in st.session_state:
         st.session_state.view = "Inicio"
 
@@ -509,5 +556,3 @@ else:
         if st.button("⬅️ Regresar al inicio"):
             st.session_state.view = "Inicio"
             st.rerun()
-
-     
