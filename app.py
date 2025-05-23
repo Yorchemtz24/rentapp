@@ -468,7 +468,7 @@ else:
             st.session_state.view = "Inicio"
             st.rerun()
 
-    elif st.session_state.view == "Finalizar Renta":
+       elif st.session_state.view == "Finalizar Renta":
         st.subheader("✅ Finalizar Renta")
         df_rentas = read_table("rentas")
         equipos = read_table("equipos")
@@ -476,7 +476,13 @@ else:
             st.info("ℹ️ No hay rentas activas.")
         else:
             df_rentas["equipos"] = df_rentas["equipos"].apply(lambda x: json.loads(x) if isinstance(x, str) and x else [])
-            rentas_activas = df_rentas[df_rentas.equipos.apply(lambda eqs: any(equipos[equipos.id_equipo == eq].estado.iloc[0] == "rentado" for eq in eqs if not equipos[equipos.id_equipo == eq].empty)]
+            rentas_activas = df_rentas[df_rentas.equipos.apply(
+                lambda eqs: any(
+                    equipos[equipos.id_equipo == eq].estado.iloc[0] == "rentado" 
+                    for eq in eqs 
+                    if not equipos[equipos.id_equipo == eq].empty
+                )
+            )]
             if rentas_activas.empty:
                 st.info("ℹ️ No hay rentas activas para finalizar.")
             else:
