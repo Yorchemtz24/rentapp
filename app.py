@@ -58,30 +58,89 @@ st.markdown("""
 # Configuración de GitHub
 GITHUB_TOKEN = st.secrets.get("GITHUB_TOKEN", None)
 REPO_NAME = "Yorchemtz24/rentapp"
-if not GITHUB_TOKEN:
-    st.error("GitHub token not configured. Please set GITHUB_TOKEN in Streamlit secrets.")
 
-# Configuración de base de datos para Streamlit Cloud
-@st.cache_resource
+# SOLUCIÓN MEJORADA: Configuración de base de datos persistente
 def get_db_path():
-    """Crear un archivo temporal para la base de datos que persista durante la sesión"""
-    if 'db_path' not in st.session_state:
-        # Usar un archivo temporal en el directorio temporal del sistema
-        temp_dir = tempfile.gettempdir()
-        st.session_state.db_path = os.path.join(temp_dir, "rentapp_database.db")
-    return st.session_state.db_path
+    """Configurar ruta de base de datos que persista en Streamlit Cloud"""
+    # Intentar usar directorio de trabajo actual primero
+    current_dir = os.getcwd()
+    db_path = os.path.join(current_dir, "rentapp_database.db")
+    
+    # Si no se puede escribir en el directorio actual, usar directorio home
+    if not os.access(current_dir, os.W_OK):
+        home_dir = os.path.expanduser("~")
+        db_path = os.path.join(home_dir, "rentapp_database.db")
+    
+    return db_path
 
 DB_PATH = get_db_path()
 
-# Inicializar base de datos SQLite
-@st.cache_resource
-def initialize_db():
-    """Inicializar la base de datos con manejo de errores"""
+# Función mejorada para descargar base de datos de GitHub
+def download_db_from_github():
+    """Descargar base de datos desde GitHub si existe"""
+    if not GITHUB_TOKEN:
+        return False
+    
     try:
+        g = Github(GITHUB_TOKEN)
+        repo = g.get_repo(REPO_NAME)
+        
+        try:
+            contents = repo.get_contents("db/database.db")
+            with open(DB_PATH, "wb") as f:
+                f.write(contents.decoded_content)
+            st.info("✅ Base de datos descargada desde GitHub")
+            return True
+        except:
+            st.info("ℹ️ No se encontró base de datos en GitHub, creando nueva...")
+            return False
+    except Exception as e:
+        st.warning(f"⚠️ No se pudo descargar desde GitHub: {e}")
+        return False
+
+# Función mejorada para subir base de datos a GitHub
+def upload_db_to_github():
+    """Subir base de datos a GitHub"""
+    if not GITHUB_TOKEN:
+        st.warning("⚠️ GitHub token no configurado. Los cambios solo se guardan localmente.")
+        return True
+    
+    try:
+        if not os.path.exists(DB_PATH):
+            return False
+            
+        g = Github(GITHUB_TOKEN)
+        repo = g.get_repo(REPO_NAME)
+        
+        with open(DB_PATH, "rb") as file:
+            content = file.read()
+        
+        try:
+            # Intentar actualizar archivo existente
+            contents = repo.get_contents("db/database.db")
+            repo.update_file(contents.path, "Update database.db", content, contents.sha)
+        except:
+            # Crear archivo si no existe
+            repo.create_file("db/database.db", "Create database.db", content)
+        
+        st.success("✅ Base de datos sincronizada con GitHub")
+        return True
+    except Exception as e:
+        st.warning(f"⚠️ No se pudo sincronizar con GitHub: {e}")
+        return True
+
+# Inicialización mejorada de base de datos
+def initialize_db():
+    """Inicializar la base de datos con persistencia mejorada"""
+    try:
+        # Primero intentar descargar desde GitHub si no existe localmente
+        if not os.path.exists(DB_PATH):
+            download_db_from_github()
+        
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
-        # Crear tablas
+        # Crear tablas si no existen
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS equipos (
                 id_equipo TEXT PRIMARY KEY,
@@ -122,7 +181,7 @@ def initialize_db():
             )
         """)
         
-        # Crear usuario admin por defecto
+        # Crear usuario admin por defecto si no existe
         cursor.execute("SELECT COUNT(*) FROM usuarios WHERE usuario = 'admin'")
         if cursor.fetchone()[0] == 0:
             hashed_password = bcrypt.hashpw("12345".encode('utf-8'), bcrypt.gensalt())
@@ -131,69 +190,48 @@ def initialize_db():
         
         conn.commit()
         conn.close()
+        
+        # Subir a GitHub después de inicializar
+        upload_db_to_github()
         return True
         
     except Exception as e:
         st.error(f"Error inicializando base de datos: {e}")
         return False
 
-# Inicializar base de datos
-if initialize_db():
-    st.success("✅ Base de datos inicializada correctamente", icon="✅")
-else:
-    st.error("❌ Error al inicializar la base de datos")
-
-# Función para sincronizar database.db con GitHub (simplificada)
-def update_db_in_github():
-    """Función simplificada para sincronización con GitHub"""
-    if not GITHUB_TOKEN:
-        st.warning("⚠️ GitHub token no configurado. Los cambios solo se guardan localmente.")
-        return True
-    
-    try:
-        # Solo intentar actualizar si el archivo existe y es accesible
-        if os.path.exists(DB_PATH):
-            g = Github(GITHUB_TOKEN)
-            repo = g.get_repo(REPO_NAME)
-            
-            with open(DB_PATH, "rb") as file:
-                content = file.read()
-            
-            try:
-                contents = repo.get_contents("db/database.db")
-                repo.update_file(contents.path, "Update database.db", content, contents.sha)
-            except:
-                repo.create_file("db/database.db", "Create database.db", content)
-            
-            st.info("✅ Base de datos sincronizada con GitHub")
-            return True
-    except Exception as e:
-        st.warning(f"⚠️ No se pudo sincronizar con GitHub: {e}")
-        return True  # Continuar funcionando sin sincronización
-
-# Funciones auxiliares con manejo de errores mejorado
+# Funciones auxiliares mejoradas
 def read_table(table_name):
-    """Leer tabla de la base de datos con manejo de errores"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
-        conn.close()
-        return df
-    except Exception as e:
-        st.error(f"Error leyendo tabla {table_name}: {e}")
-        return pd.DataFrame()
+    """Leer tabla de la base de datos con reintentos"""
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            conn = sqlite3.connect(DB_PATH, timeout=30)
+            df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
+            conn.close()
+            return df
+        except Exception as e:
+            if attempt == max_retries - 1:
+                st.error(f"Error leyendo tabla {table_name}: {e}")
+                return pd.DataFrame()
+            st.warning(f"Reintentando lectura de tabla {table_name}... (intento {attempt + 1})")
 
 def write_table(table_name, df):
-    """Escribir tabla en la base de datos con manejo de errores"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        df.to_sql(table_name, conn, if_exists='replace', index=False)
-        conn.close()
-        update_db_in_github()
-        return True
-    except Exception as e:
-        st.error(f"Error escribiendo tabla {table_name}: {e}")
-        return False
+    """Escribir tabla en la base de datos con reintentos y sincronización"""
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            conn = sqlite3.connect(DB_PATH, timeout=30)
+            df.to_sql(table_name, conn, if_exists='replace', index=False)
+            conn.close()
+            
+            # Sincronizar con GitHub después de escribir
+            upload_db_to_github()
+            return True
+        except Exception as e:
+            if attempt == max_retries - 1:
+                st.error(f"Error escribiendo tabla {table_name}: {e}")
+                return False
+            st.warning(f"Reintentando escritura en tabla {table_name}... (intento {attempt + 1})")
 
 def validate_email(email):
     pattern = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
@@ -206,6 +244,12 @@ def validate_phone(phone):
 def highlight_status(val):
     color = 'green' if val == 'disponible' else 'orange' if val == 'rentado' else 'red'
     return f'background-color: {color}; color: white;'
+
+# Inicializar base de datos al inicio
+if initialize_db():
+    st.success("✅ Base de datos inicializada correctamente", icon="✅")
+else:
+    st.error("❌ Error al inicializar la base de datos")
 
 # Autenticación
 if "authenticated" not in st.session_state:
@@ -242,7 +286,14 @@ if not st.session_state.authenticated:
                         except Exception as e:
                             st.error(f"❌ Error al verificar contraseña: {e}")
 else:
-    # El resto del código permanece igual...
+    # Agregar indicador de estado de persistencia
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        if os.path.exists(DB_PATH):
+            st.success("🟢 DB Activa")
+        else:
+            st.error("🔴 DB Error")
+    
     if "view" not in st.session_state:
         st.session_state.view = "Inicio"
 
@@ -310,6 +361,7 @@ else:
                     df_equipos = pd.concat([df_equipos, nuevo], ignore_index=True)
                     if write_table("equipos", df_equipos):
                         st.success("✅ Equipo registrado correctamente")
+                        st.rerun()
                     else:
                         st.error("❌ Fallo al registrar el equipo")
         if st.button("⬅️ Regresar al inicio"):
@@ -339,6 +391,7 @@ else:
                     df_clientes = pd.concat([df_clientes, nuevo], ignore_index=True)
                     if write_table("clientes", df_clientes):
                         st.success("✅ Cliente registrado correctamente")
+                        st.rerun()
                     else:
                         st.error("❌ Fallo al registrar el cliente")
         if st.button("⬅️ Regresar al inicio"):
@@ -404,6 +457,7 @@ else:
                                 equipos.loc[equipos.id_equipo == equipo, "estado"] = "rentado"
                             if write_table("equipos", equipos):
                                 st.success("✅ Renta registrada correctamente")
+                                st.rerun()
                             else:
                                 st.error("❌ Fallo al actualizar el estado de los equipos")
                         else:
@@ -550,9 +604,6 @@ else:
                         
                         if write_table("equipos", equipos) and write_table("rentas", df_rentas):
                             st.success(f"✅ Renta {renta_seleccionada} finalizada")
+                            st.rerun()
                         else:
-                            st.error("❌ Error al finalizar la renta")
-        
-        if st.button("⬅️ Regresar al inicio"):
-            st.session_state.view = "Inicio"
-            st.rerun()
+                            st.error("❌
