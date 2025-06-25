@@ -606,4 +606,7 @@ else:
                             st.success(f"✅ Renta {renta_seleccionada} finalizada")
                             st.rerun()
                         else:
-                            st.error("❌
+                             st.error("❌ Error al finalizar la renta")
+        if st.button("⬅️ Regresar al inicio"):
+            st.session_state.view = "Inicio"
+            st.rerun()
